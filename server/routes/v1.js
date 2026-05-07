@@ -333,55 +333,66 @@ export function createV1Router({ db, verifyAdminPasscode, uploadsDir }) {
   });
 
   router.get('/events/:id', async (req, res) => {
-    const all = await db.readTable('events');
-    const items = Array.isArray(all) ? all : [];
-    const { item } = findById(items, req.params.id);
-    if (!item) return jsonError(res, 404, 'Not found');
-    res.json({ ok: true, item });
+    try {
+      const result = await db.query('SELECT * FROM events WHERE id = $1', [req.params.id]);
+      if (result.rowCount === 0) return jsonError(res, 404, 'Not found');
+      res.json({ ok: true, item: result.rows[0] });
+    } catch (err) {
+      console.error('Failed to fetch event:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
   });
 
   router.put('/events/:id', adminOnly, async (req, res) => {
     if (!requireObjectBody(req)) return jsonError(res, 400, 'Invalid body');
-    const all = await db.readTable('events');
-    const items = Array.isArray(all) ? all : [];
-    const { idx, item } = findById(items, req.params.id);
-    if (!item) return jsonError(res, 404, 'Not found');
+    try {
+      const existing = await db.query('SELECT * FROM events WHERE id = $1', [req.params.id]);
+      if (existing.rowCount === 0) return jsonError(res, 404, 'Not found');
+      
+      const item = existing.rows[0];
+      const nextStatus = pickString(req.body.status) || item.status;
+      const now = nowIso();
+      
+      const next = {
+        title: pickString(req.body.title) || item.title,
+        description: pickOptionalString(req.body.description) ?? item.description,
+        location: pickOptionalString(req.body.location) ?? item.location,
+        start_at: pickOptionalString(req.body.startAt) ?? item.start_at,
+        end_at: pickOptionalString(req.body.endAt) ?? item.end_at,
+        status: nextStatus,
+        updated_at: now,
+      };
 
-    const nextStatus = pickString(req.body.status) || item.status;
-    const next = {
-      ...item,
-      title: pickString(req.body.title) || item.title,
-      description: pickOptionalString(req.body.description) ?? item.description ?? null,
-      location: pickOptionalString(req.body.location) ?? item.location ?? null,
-      startAt: pickOptionalString(req.body.startAt) ?? item.startAt ?? null,
-      endAt: pickOptionalString(req.body.endAt) ?? item.endAt ?? null,
-      status: nextStatus,
-      updatedAt: nowIso(),
-    };
+      if (next.start_at && !isIsoDate(next.start_at)) return jsonError(res, 400, 'startAt must be ISO datetime');
+      if (next.end_at && !isIsoDate(next.end_at)) return jsonError(res, 400, 'endAt must be ISO datetime');
 
-    if (next.startAt && !isIsoDate(next.startAt)) return jsonError(res, 400, 'startAt must be ISO datetime');
-    if (next.endAt && !isIsoDate(next.endAt)) return jsonError(res, 400, 'endAt must be ISO datetime');
+      let statusHistory = Array.isArray(item.status_history) ? item.status_history : [];
+      if (nextStatus !== item.status) {
+        statusHistory.push({ at: now, status: nextStatus, note: pickOptionalString(req.body.statusNote) });
+      }
 
-    const statusChanged = nextStatus !== item.status;
-    if (statusChanged) {
-      const history = Array.isArray(item.statusHistory) ? item.statusHistory : [];
-      history.push({ at: nowIso(), status: nextStatus, note: pickOptionalString(req.body.statusNote) });
-      next.statusHistory = history;
+      await db.query(
+        `UPDATE events SET title = $1, description = $2, location = $3, start_at = $4, end_at = $5, status = $6, status_history = $7, updated_at = $8
+         WHERE id = $9`,
+        [next.title, next.description, next.location, next.start_at, next.end_at, next.status, JSON.stringify(statusHistory), now, req.params.id]
+      );
+
+      res.json({ ok: true, item: { ...item, ...next, status_history: statusHistory } });
+    } catch (err) {
+      console.error('Failed to update event:', err);
+      jsonError(res, 500, 'Internal Server Error');
     }
-
-    items[idx] = next;
-    await db.writeTable('events', items);
-    res.json({ ok: true, item: next });
   });
 
   router.delete('/events/:id', adminOnly, async (req, res) => {
-    const all = await db.readTable('events');
-    const items = Array.isArray(all) ? all : [];
-    const { idx } = findById(items, req.params.id);
-    if (idx < 0) return jsonError(res, 404, 'Not found');
-    items.splice(idx, 1);
-    await db.writeTable('events', items);
-    res.json({ ok: true });
+    try {
+      const result = await db.query('DELETE FROM events WHERE id = $1', [req.params.id]);
+      if (result.rowCount === 0) return jsonError(res, 404, 'Not found');
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Failed to delete event:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
   });
 
   router.get('/media', async (req, res) => {
@@ -392,30 +403,61 @@ export function createV1Router({ db, verifyAdminPasscode, uploadsDir }) {
     const wantCategories = pickOptionalString(req.query.categories);
     const limit = parseLimit(req.query.limit, 50, 300);
     const offset = parseOffset(req.query.offset, 0);
-    const all = await db.readTable('media');
-    let items = Array.isArray(all) ? all : [];
-    if (wantCategories === '1') {
-      const cats = Array.from(
-        new Set(
-          items
-            .map((x) => (typeof x?.category === 'string' ? x.category.trim() : ''))
-            .filter(Boolean)
-        )
-      ).sort((a, b) => a.localeCompare(b));
-      const total = cats.length;
-      res.json(listResponse(cats.slice(offset, offset + limit), { total, limit, offset }));
-      return;
+
+    try {
+      if (wantCategories === '1') {
+        const result = await db.query('SELECT DISTINCT category FROM media WHERE category IS NOT NULL ORDER BY category ASC');
+        const cats = result.rows.map(r => r.category);
+        const total = cats.length;
+        res.json(listResponse(cats.slice(offset, offset + limit), { total, limit, offset }));
+        return;
+      }
+
+      let query = 'SELECT * FROM media';
+      const params = [];
+      const conditions = [];
+
+      if (ids) {
+        const idList = ids.split(',').map(s => s.trim()).filter(Boolean);
+        if (idList.length > 0) {
+          params.push(idList);
+          conditions.push(`id = ANY($${params.length})`);
+        }
+      }
+
+      if (category) {
+        params.push(category);
+        conditions.push(`category = $${params.length}`);
+      }
+
+      if (type) {
+        params.push(type);
+        conditions.push(`type = $${params.length}`);
+      }
+
+      if (q) {
+        params.push(`%${q}%`);
+        conditions.push(`(title ILIKE $${params.length} OR description ILIKE $${params.length})`);
+      }
+
+      if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ');
+      }
+
+      query += ' ORDER BY created_at DESC';
+      
+      const totalResult = await db.query(`SELECT COUNT(*) FROM (${query}) AS t`, params);
+      const total = parseInt(totalResult.rows[0].count);
+
+      params.push(limit, offset);
+      query += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+      
+      const result = await db.query(query, params);
+      res.json(listResponse(result.rows, { total, limit, offset }));
+    } catch (err) {
+      console.error('Failed to fetch media:', err);
+      jsonError(res, 500, 'Internal Server Error');
     }
-    if (ids) {
-      const set = new Set(ids.split(',').map(s => s.trim()).filter(Boolean));
-      items = items.filter(x => set.has(x.id));
-    }
-    if (category) items = items.filter((x) => String(x?.category || '') === category);
-    if (type) items = items.filter((x) => String(x?.type || '') === type);
-    if (q) items = items.filter((x) => matchesQuery(getTextIndex(x), q));
-    items = items.slice().sort(sortByUpdatedAtDesc);
-    const total = items.length;
-    res.json(listResponse(items.slice(offset, offset + limit), { total, limit, offset }));
   });
 
   router.post('/media/presigned', adminOnly, async (req, res) => {

@@ -22,6 +22,7 @@ import { AuthProvider } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Profile } from './pages/Profile';
+import { MediaLibrary } from './pages/MediaLibrary';
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
               <Route path="blog/:slug" element={<BlogPost />} />
               <Route path="feed" element={<SocialFeed />} />
               <Route path="ask" element={<AskAhiajoku />} />
+              <Route path="media" element={<MediaLibrary />} />
               <Route path="contact" element={<Contact />} />
               <Route path="login" element={<Login />} />
               <Route path="register" element={<Register />} />

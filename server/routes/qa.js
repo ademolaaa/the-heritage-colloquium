@@ -44,14 +44,18 @@ export function createQARouter() {
     }
   });
 
-  // POST /questions - Ask a question
-  router.post('/questions', requireAuth, async (req, res) => {
+  // POST /questions - Ask a question (auth optional — anonymous allowed)
+  router.post('/questions', optionalAuth, async (req, res) => {
     if (!requireObjectBody(req)) return jsonError(res, 400, 'Invalid body');
     
     const content = pickString(req.body.content);
     const category = pickString(req.body.category) || 'General';
     
     if (!content) return jsonError(res, 400, 'Content is required');
+    
+    // Accept name/email from body for anonymous users
+    const userName = req.user?.username || pickString(req.body.name) || 'Anonymous';
+    const userEmail = req.user?.email || pickString(req.body.email) || null;
     
     const id = createId('qst');
     const now = nowIso();
@@ -60,7 +64,7 @@ export function createQARouter() {
       await db.query(
         `INSERT INTO questions (id, user_name, user_email, content, category, is_public, created_at)
          VALUES ($1, $2, $3, $4, $5, TRUE, $6) RETURNING *`,
-        [id, req.user.username || 'Anonymous', req.user.email, content, category, now]
+        [id, userName, userEmail, content, category, now]
       );
       
       res.status(201).json({ ok: true, item: { id, content, category, createdAt: now } });
@@ -113,6 +117,34 @@ export function createQARouter() {
       res.status(201).json({ ok: true, item: { id, questionId, content, createdAt: now } });
     } catch (err) {
       console.error('Failed to create answer:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
+  });
+
+  // POST /questions/:id/admin-answer - Answer a question as Ahiajoku Team (admin passcode required)
+  router.post('/questions/:id/admin-answer', async (req, res) => {
+    const passcode = String(req.header('x-admin-passcode') || '');
+    if (!passcode || passcode !== process.env.ADMIN_PASSCODE) return jsonError(res, 401, 'Unauthorized');
+
+    const content = pickString(req.body.content);
+    if (!content) return jsonError(res, 400, 'Content is required');
+
+    try {
+      const qCheck = await db.query('SELECT 1 FROM questions WHERE id = $1', [req.params.id]);
+      if (qCheck.rowCount === 0) return jsonError(res, 404, 'Question not found');
+
+      const id = createId('ans');
+      const now = nowIso();
+
+      await db.query(
+        'INSERT INTO answers (id, question_id, responder_name, content, created_at) VALUES ($1,$2,$3,$4,$5)',
+        [id, req.params.id, 'Ahiajoku Team', content, now]
+      );
+      await db.query('UPDATE questions SET is_answered = TRUE, is_public = TRUE WHERE id = $1', [req.params.id]);
+
+      res.status(201).json({ ok: true, item: { id, questionId: req.params.id, content, responderName: 'Ahiajoku Team', createdAt: now } });
+    } catch (err) {
+      console.error('Failed to create admin answer:', err);
       jsonError(res, 500, 'Internal Server Error');
     }
   });

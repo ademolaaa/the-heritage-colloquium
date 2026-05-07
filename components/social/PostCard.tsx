@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
-import { SmartImage } from '../ui/SmartImage';
+import { MediaPreview } from '../media/MediaPreview';
 
 interface Comment {
   id: string;
@@ -74,44 +74,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onAddComment, 
     setNewComment('');
   };
 
-  const renderMedia = (media: MediaItem) => {
-    if (media.type === 'image' || media.mime_type?.startsWith('image/')) {
-      return (
-        <SmartImage 
-          key={media.id}
-          src={media.url} 
-          alt="Post content" 
-          className="w-full h-auto rounded-sm mb-4"
-          fallbackSrc=""
-        />
-      );
-    }
-    if (media.type === 'video' || media.mime_type?.startsWith('video/')) {
-      return (
-        <video 
-          key={media.id}
-          controls 
-          className="w-full h-auto rounded-sm mb-4 bg-black"
-        >
-          <source src={media.url} type={media.mime_type} />
-          Your browser does not support the video tag.
-        </video>
-      );
-    }
-    if (media.type === 'audio' || media.mime_type?.startsWith('audio/')) {
-      return (
-        <audio 
-          key={media.id}
-          controls 
-          className="w-full mb-4"
-        >
-          <source src={media.url} type={media.mime_type} />
-          Your browser does not support the audio element.
-        </audio>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="border border-white/5 bg-charcoal/30 p-6 rounded-sm mb-6">
@@ -132,8 +94,10 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onAddComment, 
       </div>
 
       {post.media_items && post.media_items.length > 0 && (
-        <div className="mb-4">
-          {post.media_items.map(renderMedia)}
+        <div className="mb-4 space-y-3">
+          {post.media_items.map((m: any) => (
+            <MediaPreview key={m.id} item={m} />
+          ))}
         </div>
       )}
 

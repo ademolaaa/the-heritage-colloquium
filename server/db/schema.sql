@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS media (
   url TEXT NOT NULL,
   file_path TEXT,
   s3_key TEXT,
+  storage_bucket TEXT DEFAULT 'heritage-media',
+  storage_path TEXT,
+  thumbnail_url TEXT,
+  duration_seconds INTEGER,
   mime_type VARCHAR(100),
   size_bytes BIGINT,
   category VARCHAR(50),
@@ -115,6 +119,7 @@ CREATE TABLE IF NOT EXISTS posts (
   user_id VARCHAR(255), -- Could be anonymous or linked to auth
   content TEXT,
   media_ids JSONB, -- Array of media IDs
+  post_type VARCHAR(20) DEFAULT 'text', -- text | music | video | image
   likes_count INT DEFAULT 0,
   comments_count INT DEFAULT 0,
   is_approved BOOLEAN DEFAULT FALSE, -- Moderation

@@ -63,14 +63,9 @@ app.use('/api/media', createMediaRouter({ uploadsDir: UPLOADS_DIR }));
 
 app.get('/api/content', async (_req, res) => {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    const raw = await fs.readFile(CONTENT_FILE, 'utf8').catch(() => '');
-    if (!raw) {
-      res.json({ ok: true, content: null });
-      return;
-    }
-    const parsed = JSON.parse(raw);
-    res.json({ ok: true, content: parsed });
+    const record = await db.readTable('siteSettings');
+    // Map the record to the expected 'content' structure
+    res.json({ ok: true, content: record || null });
   } catch (e) {
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : 'Unknown error' });
   }
@@ -89,8 +84,8 @@ app.put('/api/content', async (req, res) => {
   }
 
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(CONTENT_FILE, JSON.stringify(req.body, null, 2), 'utf8');
+    // Save to the 'site_settings' table in Postgres
+    await db.writeTable('siteSettings', req.body);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : 'Unknown error' });
@@ -98,18 +93,10 @@ app.put('/api/content', async (req, res) => {
 });
 
 app.put('/api/admin/passcode', async (req, res) => {
-  try {
-    const current = String(req.header('x-admin-passcode') || '');
-    const next = typeof req.body?.newPasscode === 'string' ? req.body.newPasscode : '';
-    const result = await adminAuth.rotatePasscode(current, next);
-    if (!result.ok) {
-      res.status(result.error === 'Unauthorized' ? 401 : 400).json({ ok: false, error: result.error });
-      return;
-    }
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e instanceof Error ? e.message : 'Unknown error' });
-  }
+  res.status(400).json({ 
+    ok: false, 
+    error: 'Passcode rotation is disabled in Serverless mode. Please update the ADMIN_PASSCODE variable in your Vercel dashboard.' 
+  });
 });
 
 // SPA Fallback: Serve index.html for any unknown non-API routes
