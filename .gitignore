@@ -13,7 +13,8 @@ node_modules
 .env.*.local
 dist
 dist-ssr
-server/db
+server/db/*.json
+server/db/tables
 docs/legacy
 docs/archive
 *.zip

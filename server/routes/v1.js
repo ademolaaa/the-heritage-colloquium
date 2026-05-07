@@ -127,13 +127,40 @@ export function createV1Router({ db, verifyAdminPasscode, uploadsDir }) {
     const year = pickNumber(req.query.year);
     const limit = parseLimit(req.query.limit, 50, 300);
     const offset = parseOffset(req.query.offset, 0);
-    const all = await db.readTable('lectures');
-    let items = Array.isArray(all) ? all : [];
-    if (Number.isFinite(year)) items = items.filter((x) => Number(x?.year) === year);
-    if (q) items = items.filter((x) => matchesQuery(getTextIndex(x), q));
-    items = items.slice().sort((a, b) => Number(b?.year || 0) - Number(a?.year || 0));
-    const total = items.length;
-    res.json(listResponse(items.slice(offset, offset + limit), { total, limit, offset }));
+    
+    try {
+      let query = 'SELECT * FROM lectures';
+      const params = [];
+      const conditions = [];
+
+      if (Number.isFinite(year)) {
+        params.push(year);
+        conditions.push(`year = $${params.length}`);
+      }
+
+      if (q) {
+        params.push(`%${q}%`);
+        conditions.push(`(title ILIKE $${params.length} OR speaker ILIKE $${params.length} OR theme ILIKE $${params.length})`);
+      }
+
+      if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ');
+      }
+
+      query += ' ORDER BY year DESC';
+      
+      const totalResult = await db.query(`SELECT COUNT(*) FROM (${query}) AS t`, params);
+      const total = parseInt(totalResult.rows[0].count);
+
+      params.push(limit, offset);
+      query += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+      
+      const result = await db.query(query, params);
+      res.json(listResponse(result.rows, { total, limit, offset }));
+    } catch (err) {
+      console.error('Failed to fetch lectures:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
   });
 
   router.post('/lectures', adminOnly, async (req, res) => {
@@ -141,63 +168,88 @@ export function createV1Router({ db, verifyAdminPasscode, uploadsDir }) {
     const year = pickNumber(req.body.year);
     const title = pickString(req.body.title);
     if (!Number.isFinite(year) || !title) return jsonError(res, 400, 'Missing required fields');
-    const all = await db.readTable('lectures');
-    const items = Array.isArray(all) ? all : [];
-    const record = {
-      id: createId('lec'),
-      year,
-      theme: pickOptionalString(req.body.theme),
-      speaker: pickOptionalString(req.body.speaker),
-      title,
-      description: pickOptionalString(req.body.description),
-      image: pickOptionalString(req.body.image),
-      role: pickOptionalString(req.body.role),
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-    };
-    items.push(record);
-    await db.writeTable('lectures', items);
-    res.status(201).json({ ok: true, item: record });
+
+    try {
+      const id = createId('lec');
+      const now = nowIso();
+      const record = {
+        id,
+        year,
+        theme: pickOptionalString(req.body.theme),
+        speaker: pickOptionalString(req.body.speaker),
+        title,
+        description: pickOptionalString(req.body.description),
+        image: pickOptionalString(req.body.image),
+        role: pickOptionalString(req.body.role),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await db.query(
+        `INSERT INTO lectures (id, year, theme, speaker, title, description, image, role, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [id, year, record.theme, record.speaker, title, record.description, record.image, record.role, now, now]
+      );
+
+      res.status(201).json({ ok: true, item: record });
+    } catch (err) {
+      console.error('Failed to create lecture:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
   });
 
   router.get('/lectures/:id', async (req, res) => {
-    const all = await db.readTable('lectures');
-    const items = Array.isArray(all) ? all : [];
-    const { item } = findById(items, req.params.id);
-    if (!item) return jsonError(res, 404, 'Not found');
-    res.json({ ok: true, item });
+    try {
+      const result = await db.query('SELECT * FROM lectures WHERE id = $1', [req.params.id]);
+      if (result.rowCount === 0) return jsonError(res, 404, 'Not found');
+      res.json({ ok: true, item: result.rows[0] });
+    } catch (err) {
+      console.error('Failed to fetch lecture:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
   });
 
   router.put('/lectures/:id', adminOnly, async (req, res) => {
     if (!requireObjectBody(req)) return jsonError(res, 400, 'Invalid body');
-    const all = await db.readTable('lectures');
-    const items = Array.isArray(all) ? all : [];
-    const { idx, item } = findById(items, req.params.id);
-    if (!item) return jsonError(res, 404, 'Not found');
-    const next = {
-      ...item,
-      year: pickNumber(req.body.year) ?? item.year,
-      theme: pickOptionalString(req.body.theme) ?? item.theme ?? null,
-      speaker: pickOptionalString(req.body.speaker) ?? item.speaker ?? null,
-      title: pickString(req.body.title) || item.title,
-      description: pickOptionalString(req.body.description) ?? item.description ?? null,
-      image: pickOptionalString(req.body.image) ?? item.image ?? null,
-      role: pickOptionalString(req.body.role) ?? item.role ?? null,
-      updatedAt: nowIso(),
-    };
-    items[idx] = next;
-    await db.writeTable('lectures', items);
-    res.json({ ok: true, item: next });
+    try {
+      const existing = await db.query('SELECT * FROM lectures WHERE id = $1', [req.params.id]);
+      if (existing.rowCount === 0) return jsonError(res, 404, 'Not found');
+      
+      const item = existing.rows[0];
+      const now = nowIso();
+      const next = {
+        year: pickNumber(req.body.year) ?? item.year,
+        theme: pickOptionalString(req.body.theme) ?? item.theme,
+        speaker: pickOptionalString(req.body.speaker) ?? item.speaker,
+        title: pickString(req.body.title) || item.title,
+        description: pickOptionalString(req.body.description) ?? item.description,
+        image: pickOptionalString(req.body.image) ?? item.image,
+        role: pickOptionalString(req.body.role) ?? item.role,
+        updated_at: now,
+      };
+
+      await db.query(
+        `UPDATE lectures SET year = $1, theme = $2, speaker = $3, title = $4, description = $5, image = $6, role = $7, updated_at = $8
+         WHERE id = $9`,
+        [next.year, next.theme, next.speaker, next.title, next.description, next.image, next.role, now, req.params.id]
+      );
+
+      res.json({ ok: true, item: { ...item, ...next } });
+    } catch (err) {
+      console.error('Failed to update lecture:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
   });
 
   router.delete('/lectures/:id', adminOnly, async (req, res) => {
-    const all = await db.readTable('lectures');
-    const items = Array.isArray(all) ? all : [];
-    const { idx } = findById(items, req.params.id);
-    if (idx < 0) return jsonError(res, 404, 'Not found');
-    items.splice(idx, 1);
-    await db.writeTable('lectures', items);
-    res.json({ ok: true });
+    try {
+      const result = await db.query('DELETE FROM lectures WHERE id = $1', [req.params.id]);
+      if (result.rowCount === 0) return jsonError(res, 404, 'Not found');
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Failed to delete lecture:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
   });
 
   router.get('/events', async (req, res) => {
@@ -205,13 +257,40 @@ export function createV1Router({ db, verifyAdminPasscode, uploadsDir }) {
     const status = pickOptionalString(req.query.status);
     const limit = parseLimit(req.query.limit, 50, 300);
     const offset = parseOffset(req.query.offset, 0);
-    const all = await db.readTable('events');
-    let items = Array.isArray(all) ? all : [];
-    if (status) items = items.filter((x) => String(x?.status || '') === status);
-    if (q) items = items.filter((x) => matchesQuery(getTextIndex(x), q));
-    items = items.slice().sort(sortByUpdatedAtDesc);
-    const total = items.length;
-    res.json(listResponse(items.slice(offset, offset + limit), { total, limit, offset }));
+
+    try {
+      let query = 'SELECT * FROM events';
+      const params = [];
+      const conditions = [];
+
+      if (status) {
+        params.push(status);
+        conditions.push(`status = $${params.length}`);
+      }
+
+      if (q) {
+        params.push(`%${q}%`);
+        conditions.push(`(title ILIKE $${params.length} OR description ILIKE $${params.length} OR location ILIKE $${params.length})`);
+      }
+
+      if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ');
+      }
+
+      query += ' ORDER BY start_at DESC NULLS LAST, created_at DESC';
+      
+      const totalResult = await db.query(`SELECT COUNT(*) FROM (${query}) AS t`, params);
+      const total = parseInt(totalResult.rows[0].count);
+
+      params.push(limit, offset);
+      query += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+      
+      const result = await db.query(query, params);
+      res.json(listResponse(result.rows, { total, limit, offset }));
+    } catch (err) {
+      console.error('Failed to fetch events:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
   });
 
   router.post('/events', adminOnly, async (req, res) => {
@@ -221,23 +300,36 @@ export function createV1Router({ db, verifyAdminPasscode, uploadsDir }) {
     const status = pickString(req.body.status) || 'scheduled';
     if (!title) return jsonError(res, 400, 'Missing required fields');
     if (startAt && !isIsoDate(startAt)) return jsonError(res, 400, 'startAt must be ISO datetime');
-    const all = await db.readTable('events');
-    const items = Array.isArray(all) ? all : [];
-    const record = {
-      id: createId('evt'),
-      title,
-      description: pickOptionalString(req.body.description),
-      location: pickOptionalString(req.body.location),
-      startAt,
-      endAt: pickOptionalString(req.body.endAt),
-      status,
-      statusHistory: [{ at: nowIso(), status, note: pickOptionalString(req.body.statusNote) }],
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-    };
-    items.push(record);
-    await db.writeTable('events', items);
-    res.status(201).json({ ok: true, item: record });
+
+    try {
+      const id = createId('evt');
+      const now = nowIso();
+      const statusHistory = [{ at: now, status, note: pickOptionalString(req.body.statusNote) }];
+      
+      const record = {
+        id,
+        title,
+        description: pickOptionalString(req.body.description),
+        location: pickOptionalString(req.body.location),
+        startAt,
+        endAt: pickOptionalString(req.body.endAt),
+        status,
+        statusHistory,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await db.query(
+        `INSERT INTO events (id, title, description, location, start_at, end_at, status, status_history, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [id, title, record.description, record.location, startAt, record.endAt, status, JSON.stringify(statusHistory), now, now]
+      );
+
+      res.status(201).json({ ok: true, item: record });
+    } catch (err) {
+      console.error('Failed to create event:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
   });
 
   router.get('/events/:id', async (req, res) => {
