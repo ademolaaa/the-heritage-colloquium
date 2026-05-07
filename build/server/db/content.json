@@ -1,0 +1,22 @@
+{
+  "brand": {
+    "wordmark": "SERVER",
+    "tagline": "Colloquium",
+    "logoUrl": ""
+  },
+  "nav": [],
+  "home": {},
+  "about": {},
+  "lectureSeries": {},
+  "lecturesPage": {},
+  "sponsorsPage": {},
+  "lectures": [],
+  "sponsorTiers": [],
+  "announcements": [],
+  "downloads": [],
+  "contact": {
+    "email": "",
+    "phone": "",
+    "address": ""
+  }
+}

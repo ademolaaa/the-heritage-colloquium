@@ -1,0 +1,17 @@
+manifest_version = 4
+service_id = "" # Populated after 'fastly compute init'
+name = "the-heritage-colloquium"
+
+[scripts]
+  build = "npm run build && next-compute-js-build"
+  post_init = "npm install"
+
+[local_server]
+  # Mock backends for local development simulation
+  [local_server.backends.cms_origin]
+    url = "https://cms-staging.ahiajoku.im.gov.ng"
+    override_host = "cms-staging.ahiajoku.im.gov.ng"
+
+  [local_server.backends.s3_storage]
+    url = "https://s3.us-east-1.amazonaws.com"
+    override_host = "s3.us-east-1.amazonaws.com"

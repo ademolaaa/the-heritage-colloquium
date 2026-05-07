@@ -1,0 +1,44 @@
+[
+  {
+    "id": "med_90fd2ae1-6b98-4c7a-bfb0-92b1de8cc136",
+    "type": "file",
+    "title": "README.md",
+    "description": null,
+    "url": "/uploads/upload_e2fc10e3-faa5-4117-a36a-2ab6011ca3ac.md",
+    "filePath": "upload_e2fc10e3-faa5-4117-a36a-2ab6011ca3ac.md",
+    "mimeType": "application/octet-stream",
+    "sizeBytes": 2105,
+    "relatedLectureId": null,
+    "relatedEventId": null,
+    "createdAt": "2026-02-06T08:02:47.506Z",
+    "updatedAt": "2026-02-06T08:02:47.506Z"
+  },
+  {
+    "id": "med_c74b2985-46e5-4913-adc4-a0d03b05a0a9",
+    "type": "file",
+    "title": "package.json",
+    "description": null,
+    "url": "/uploads/upload_c8f17249-7726-4ce7-afb6-3346c77030b8.json",
+    "filePath": "upload_c8f17249-7726-4ce7-afb6-3346c77030b8.json",
+    "mimeType": "application/json",
+    "sizeBytes": 714,
+    "relatedLectureId": null,
+    "relatedEventId": null,
+    "createdAt": "2026-02-06T14:16:17.635Z",
+    "updatedAt": "2026-02-06T14:16:17.635Z"
+  },
+  {
+    "id": "med_8e6db571-a3ca-4798-81c2-43fb234a8ad3",
+    "type": "file",
+    "title": "package.json",
+    "description": null,
+    "url": "/uploads/upload_1832b1d6-dc16-4014-84a7-923d2c997b52.json",
+    "filePath": "upload_1832b1d6-dc16-4014-84a7-923d2c997b52.json",
+    "mimeType": "application/json",
+    "sizeBytes": 714,
+    "relatedLectureId": null,
+    "relatedEventId": null,
+    "createdAt": "2026-02-06T15:44:24.820Z",
+    "updatedAt": "2026-02-06T15:44:24.821Z"
+  }
+]
