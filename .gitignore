@@ -18,6 +18,10 @@ docs/legacy
 docs/archive
 *.zip
 *.ps1
+build/
+node_bin/
+dist/
+dist-ssr/
 
 # Editor directories and files
 .vscode/*
