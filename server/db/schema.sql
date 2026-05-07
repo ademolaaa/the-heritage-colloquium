@@ -90,11 +90,11 @@ CREATE TABLE IF NOT EXISTS lectures (
 CREATE TABLE IF NOT EXISTS publications (
   id VARCHAR(255) PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
-  author VARCHAR(255),
+  authors JSONB DEFAULT '[]',
   abstract TEXT,
-  publish_date DATE,
-  pdf_url TEXT,
-  cover_image_url TEXT,
+  published_at TIMESTAMP WITH TIME ZONE,
+  url TEXT,
+  media_id VARCHAR(255) REFERENCES media(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -157,6 +157,52 @@ CREATE TABLE IF NOT EXISTS answers (
   question_id VARCHAR(255) REFERENCES questions(id) ON DELETE CASCADE,
   responder_name VARCHAR(255),
   content TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Contributors
+CREATE TABLE IF NOT EXISTS contributors (
+  id VARCHAR(255) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  role VARCHAR(255),
+  bio TEXT,
+  image_url TEXT,
+  order_index INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Press Releases
+CREATE TABLE IF NOT EXISTS press_releases (
+  id VARCHAR(255) PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  content TEXT,
+  published_at TIMESTAMP WITH TIME ZONE,
+  source VARCHAR(255),
+  url TEXT,
+  media_id VARCHAR(255) REFERENCES media(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Social Links
+CREATE TABLE IF NOT EXISTS social_links (
+  id VARCHAR(255) PRIMARY KEY,
+  platform VARCHAR(50) NOT NULL,
+  url TEXT NOT NULL,
+  icon_name VARCHAR(50),
+  order_index INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Navigation Menu
+CREATE TABLE IF NOT EXISTS navigation_menu (
+  id VARCHAR(255) PRIMARY KEY,
+  label VARCHAR(255) NOT NULL,
+  path VARCHAR(255) NOT NULL,
+  parent_id VARCHAR(255) REFERENCES navigation_menu(id),
+  order_index INTEGER DEFAULT 0,
+  is_visible BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
