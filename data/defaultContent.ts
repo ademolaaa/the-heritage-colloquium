@@ -61,6 +61,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     keynoteLabel: '2025 Ahiajoku Lecture',
     announcementsTitle: 'Blog & Announcements',
     announcementsCtaLabel: 'View Updates →',
+    liveStreamUrl: '',
   },
   about: {
     title: 'About Ahiajoku',

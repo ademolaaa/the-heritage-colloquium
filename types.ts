@@ -88,6 +88,7 @@ export interface HomeContent {
   socialFeedTitle?: string;
   socialFeedSubtitle?: string;
   socialFeedEmbedCode?: string;
+  liveStreamUrl?: string;
 }
 
 export interface LecturesPageContent {

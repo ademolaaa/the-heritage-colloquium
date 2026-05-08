@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Section } from '../components/Section';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export const Login: React.FC = () => {
   const [passcode, setPasscode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { setIsAdmin } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -25,7 +27,8 @@ export const Login: React.FC = () => {
       if (response.ok) {
         localStorage.setItem('admin_passcode', passcode);
         localStorage.setItem('is_admin', 'true');
-        navigate('/community');
+        setIsAdmin(true);
+        navigate('/admin/console');
       } else {
         setError('Invalid admin passcode. Please try again.');
       }
@@ -34,7 +37,8 @@ export const Login: React.FC = () => {
       if (passcode === 'Heritage2024') {
          localStorage.setItem('admin_passcode', passcode);
          localStorage.setItem('is_admin', 'true');
-         navigate('/community');
+         setIsAdmin(true);
+         navigate('/admin/console');
       } else {
         setError('Could not connect to authentication server.');
       }

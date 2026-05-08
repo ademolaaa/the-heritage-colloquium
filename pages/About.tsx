@@ -124,6 +124,28 @@ export const About: React.FC = () => {
         </div>
       </Section>
 
+      {/* History Section */}
+      <Section background="pattern" className="border-t border-white/5">
+        <div className="max-w-4xl mx-auto">
+          <div className="w-12 h-0.5 bg-gold-500 mb-8 mx-auto" />
+          <h2 className="font-display text-3xl md:text-4xl text-white mb-10 text-center">A Legacy Since 1979</h2>
+          <div className="prose prose-invert max-w-none">
+            <p className="text-gray-300 leading-relaxed text-lg font-light mb-8 italic text-center">
+              "Founded in 1979 by the visionary Dr. Sam Mbakwe, the Ahiajoku Lecture Festival was established as a beacon of intellectual harvesting and a banquet of ideas for the Igbo nation."
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 text-gray-400 font-light leading-loose text-sm">
+              <p>
+                What began as a single lecture series has evolved into the most prestigious cultural and intellectual gathering in West Africa. The Colloquium serves as a bridge between ancient wisdom and modern innovation, ensuring that the roots of our heritage continue to nourish the branches of our future.
+              </p>
+              <p>
+                Over the decades, we have hosted scholars, philosophers, and statesmen from across the globe, each contributing a unique thread to the rich tapestry of the Ahiajoku tradition. Today, we continue this mandate with renewed vigour, leveraging digital platforms to reach our hybrid audience worldwide.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+
       <Section background="darker">
         <div className="max-w-6xl mx-auto mb-20">
           <div className="text-center mb-16">

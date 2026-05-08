@@ -84,6 +84,14 @@ export const Home: React.FC = () => {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5, duration: 1 }}
             >
+              {content.home.liveStreamUrl && (
+                <a href={content.home.liveStreamUrl} target="_blank" rel="noreferrer" className="group">
+                  <Button className="bg-red-600 hover:bg-red-700 border-none px-8 flex items-center gap-3">
+                    <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                    Watch Live Now
+                  </Button>
+                </a>
+              )}
               <Link to={content.home.heroSecondaryCtaTo}>
                 <Button>{content.home.heroSecondaryCtaLabel}</Button>
               </Link>
@@ -110,7 +118,7 @@ export const Home: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-20 items-center">
           <motion.div style={{ y: y1 }}>
             <div className="w-20 h-0.5 bg-gold-500 mb-10" />
-            <h2 className="font-serif text-4xl md:text-5xl text-white mb-8 leading-tight">{content.home.mandateTitle}</h2>
+            <h2 className="font-serif text-4xl md:text-5xl text-white mb-8 leading-tight">The Mandate</h2>
             <p className="text-gray-400 leading-loose mb-8 font-light text-lg">
               {content.home.mandateParagraph1}
             </p>
@@ -137,7 +145,7 @@ export const Home: React.FC = () => {
       <Section background="darker">
         <div className="text-center mb-20">
           <h2 className="text-gold-500 tracking-[0.3em] text-xs uppercase mb-4 font-semibold">{content.home.keynoteLabel}</h2>
-          <h3 className="font-display text-4xl md:text-5xl text-white">The 2024 Keynote</h3>
+          <h3 className="font-display text-4xl md:text-5xl text-white">2025 Distinguished Lecturer</h3>
         </div>
 
         <div className="max-w-6xl mx-auto bg-charcoal border border-white/5 overflow-hidden group hover:border-gold-500/30 transition-all duration-700 shadow-2xl shadow-black">
@@ -277,8 +285,39 @@ export const Home: React.FC = () => {
         </div>
       </Section>
 
+      {/* Sponsors & Partners Section */}
+      <Section background="darker" className="py-20 border-t border-white/5 overflow-hidden">
+        <div className="container mx-auto px-6 mb-12 text-center">
+          <h2 className="text-gold-500 tracking-[0.3em] text-xs uppercase mb-3 font-semibold">Our Partners</h2>
+          <h3 className="font-serif text-3xl text-white italic">Heritage Guardians & Sponsors</h3>
+        </div>
+        
+        {/* Scrolling Marquee */}
+        <div className="relative flex overflow-x-hidden">
+          <div className="py-12 animate-marquee whitespace-nowrap flex items-center gap-20">
+            {/* Sample Sponsor Logos - You can replace these in the Admin dashboard */}
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">CHAIRMAN'S CIRCLE</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">HERITAGE TRUST</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">CULTURAL COUNCIL</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">AHIAJOKU SECRETARIAT</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">MINISTRY OF CULTURE</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">GLOBAL IGBO ALLIANCE</span>
+          </div>
+
+          <div className="absolute top-0 py-12 animate-marquee2 whitespace-nowrap flex items-center gap-20">
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">CHAIRMAN'S CIRCLE</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">HERITAGE TRUST</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">CULTURAL COUNCIL</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">AHIAJOKU SECRETARIAT</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">MINISTRY OF CULTURE</span>
+            <span className="text-white/20 font-display text-4xl hover:text-gold-500 transition-colors cursor-default">GLOBAL IGBO ALLIANCE</span>
+          </div>
+        </div>
+      </Section>
+
       {/* Sponsor CTA */}
       <Section background="pattern" className="text-center pb-32">
+
         <div className="max-w-4xl mx-auto py-20 border border-gold-500/10 bg-gradient-to-b from-charcoal/50 to-obsidian p-12 backdrop-blur-md relative overflow-hidden">
           {/* Decorative Corners */}
           <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-gold-500" />

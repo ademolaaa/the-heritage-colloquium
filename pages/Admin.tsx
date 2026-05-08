@@ -14,13 +14,15 @@ const PASSCODE_KEY = 'heritage.admin.passcode';
 const REMEMBER_KEY = 'heritage.admin.rememberPasscode';
 
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export const Admin: React.FC = () => {
   const navigate = useNavigate();
+  const { isAdmin, setIsAdmin } = useAuth();
   const { content, setContent, resetToDefaults, exportJson, importJson } = useSiteContent();
   const [passcode, setPasscode] = useState(() => {
     if (typeof window === 'undefined') return '';
-    return window.sessionStorage.getItem(PASSCODE_KEY) || 'change-me';
+    return window.localStorage.getItem('admin_passcode') || window.sessionStorage.getItem(PASSCODE_KEY) || 'change-me';
   });
   const [message, setMessage] = useState<string | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
@@ -51,12 +53,11 @@ export const Admin: React.FC = () => {
     }
   }, [isDev, v1ApiBaseUrl]);
 
-  const unlocked = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    return window.sessionStorage.getItem(SESSION_KEY) === '1';
-  }, []);
+  const [isUnlocked, setIsUnlocked] = useState(isAdmin);
 
-  const [isUnlocked, setIsUnlocked] = useState(unlocked);
+  useEffect(() => {
+    setIsUnlocked(isAdmin);
+  }, [isAdmin]);
 
   const fieldClass =
     'w-full bg-black/50 border border-white/10 px-4 py-3 text-white placeholder:text-white/50 focus:border-gold-500 focus:outline-none transition-colors font-serif';
@@ -98,6 +99,9 @@ export const Admin: React.FC = () => {
       return;
     }
     window.sessionStorage.setItem(SESSION_KEY, '1');
+    localStorage.setItem('is_admin', 'true');
+    localStorage.setItem('admin_passcode', value);
+    setIsAdmin(true);
     setIsUnlocked(true);
     setToast('Admin unlocked');
   };
@@ -688,6 +692,16 @@ export const Admin: React.FC = () => {
                       uploadUrl={mediaUploadUrl}
                       onToast={setToast}
                     />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className={labelClass}>Live Stream URL (YouTube/Vimeo)</label>
+                    <input
+                      className={fieldClass}
+                      value={content.home.liveStreamUrl || ''}
+                      onChange={(e) => setContent((c) => ({ ...c, home: { ...c.home, liveStreamUrl: e.target.value } }))}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                    />
+                    <p className={helpClass}>If provided, a "Watch Live Now" button will appear in the Hero section.</p>
                   </div>
                 </div>
               </div>

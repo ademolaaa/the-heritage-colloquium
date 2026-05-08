@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 
 export const Layout: React.FC = () => {
   const { content } = useSiteContent();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -100,7 +100,9 @@ export const Layout: React.FC = () => {
         { label: 'Console', path: '/admin/console' },
         { label: 'Uploads', path: '/admin/uploads' },
       ]
-    : navLinks;
+    : isAdmin 
+      ? [...navLinks, { label: 'Admin', path: '/admin/console' }]
+      : navLinks;
   const logoFallback = placeholderImageDataUri({ width: 128, height: 128, label: content.brand.wordmark });
   const toggleTheme = () => {
     const current = document.documentElement.classList.contains('dark');
