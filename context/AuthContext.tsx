@@ -25,17 +25,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
+    const checkIsAdmin = (user: User | null) => {
+      if (!user || !user.email) return false;
+      const adminEmailsRaw = ((import.meta as any).env?.VITE_ADMIN_EMAILS as string) || '';
+      if (!adminEmailsRaw) {
+        // Fallback: if no variable is set, no one is admin to protect the site
+        // You MUST set VITE_ADMIN_EMAILS in Vercel environment variables!
+        console.warn("No VITE_ADMIN_EMAILS set. Admin access is disabled.");
+        return false;
+      }
+      const adminEmails = adminEmailsRaw.split(',').map(e => e.trim().toLowerCase());
+      return adminEmails.includes(user.email.toLowerCase());
+    };
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      setIsAdmin(!!session?.user);
+      setIsAdmin(checkIsAdmin(session?.user ?? null));
       setIsLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      setIsAdmin(!!session?.user);
+      setIsAdmin(checkIsAdmin(session?.user ?? null));
       setIsLoading(false);
     });
 

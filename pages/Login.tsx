@@ -27,7 +27,15 @@ export const Login: React.FC = () => {
     }
 
     if (data.user) {
-      navigate('/admin/console');
+      const adminEmailsRaw = ((import.meta as any).env?.VITE_ADMIN_EMAILS as string) || '';
+      const adminEmails = adminEmailsRaw.split(',').map(e => e.trim().toLowerCase());
+      const isUserAdmin = data.user.email ? adminEmails.includes(data.user.email.toLowerCase()) : false;
+
+      if (isUserAdmin) {
+        navigate('/admin/console');
+      } else {
+        navigate('/feed'); // Send community members to the community feed
+      }
     }
   };
 
