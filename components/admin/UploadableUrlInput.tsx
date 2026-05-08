@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Button } from '../ui/Button';
+import { supabase } from '../../lib/supabase';
 
 type Props = {
   label: string;
@@ -31,41 +32,25 @@ export const UploadableUrlInput: React.FC<Props> = ({
   const [pendingFiles, setPendingFiles] = useState<Array<{ file: File; label: string }>>([]);
 
   const uploadSingleFile = async (file: File, title: string) => {
-    const current = passcode.trim();
-    if (!current) {
-      onToast('Enter publishing passcode');
-      return null;
-    }
-    if (!uploadUrl) {
-      onToast('Uploads not configured');
-      return null;
-    }
     try {
-      const body = new FormData();
-      body.append('file', file);
-      if (typeof title === 'string' && title.trim()) body.append('title', title.trim());
-      const res = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: { 'x-admin-passcode': current },
-        body,
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        const errorText = typeof json?.error === 'string' ? json.error : `Upload failed (${res.status})`;
-        onToast(errorText);
+      const fileExt = file.name.split('.').pop();
+      // Keep original file name but add a unique hash to prevent overwriting
+      const fileName = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('media')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        onToast(uploadError.message);
         return null;
       }
-      const item = json?.item || (Array.isArray(json?.items) ? json.items[0] : null);
-      const nextUrl = typeof item?.url === 'string' ? item.url : '';
-      if (!nextUrl) {
-        onToast('Upload failed');
-        return null;
-      }
-      const finalUrl =
-        typeof window !== 'undefined' && nextUrl.startsWith('/') ? new URL(nextUrl, window.location.origin).toString() : nextUrl;
-      return finalUrl;
-    } catch {
-      onToast('Upload failed');
+
+      const { data } = supabase.storage.from('media').getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (e: any) {
+      onToast(e.message || 'Upload failed');
       return null;
     }
   };

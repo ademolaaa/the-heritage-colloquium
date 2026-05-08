@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { Section } from '../components/Section';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useNavigate, Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 export const Login: React.FC = () => {
-  const [passcode, setPasscode] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { setIsAdmin } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -15,35 +15,19 @@ export const Login: React.FC = () => {
     setLoading(true);
     setError('');
 
-    // For now, we'll use a simple session storage for admin access
-    // In a full implementation, this would call your /api/auth/login endpoint
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passcode })
-      });
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (response.ok) {
-        localStorage.setItem('admin_passcode', passcode);
-        localStorage.setItem('is_admin', 'true');
-        setIsAdmin(true);
-        navigate('/admin/console');
-      } else {
-        setError('Invalid admin passcode. Please try again.');
-      }
-    } catch (err) {
-      // Fallback for simple local testing or if API isn't ready
-      if (passcode === 'Heritage2024') {
-         localStorage.setItem('admin_passcode', passcode);
-         localStorage.setItem('is_admin', 'true');
-         setIsAdmin(true);
-         navigate('/admin/console');
-      } else {
-        setError('Could not connect to authentication server.');
-      }
-    } finally {
+    if (authError) {
+      setError(authError.message);
       setLoading(false);
+      return;
+    }
+
+    if (data.user) {
+      navigate('/admin/console');
     }
   };
 
@@ -51,18 +35,29 @@ export const Login: React.FC = () => {
     <Section background="darker" className="pt-40 pb-20 min-h-screen flex items-center">
       <div className="container mx-auto px-6">
         <div className="max-w-md mx-auto bg-black/40 backdrop-blur-md p-8 rounded-2xl border border-white/10">
-          <h1 className="font-display text-4xl text-white mb-2 text-center">Admin Access</h1>
-          <p className="text-gray-400 text-center mb-8">Enter your passcode to manage the heritage.</p>
+          <h1 className="font-display text-4xl text-white mb-2 text-center">Sign In</h1>
+          <p className="text-gray-400 text-center mb-8">Access the community and admin tools.</p>
 
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">Admin Passcode</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold-500 transition-colors"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Password</label>
               <input
                 type="password"
-                value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-gold/50 transition-colors"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold-500 transition-colors"
                 required
               />
             </div>
@@ -76,14 +71,14 @@ export const Login: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-brand-gold text-black font-semibold py-3 rounded-xl hover:bg-white transition-colors disabled:opacity-50"
+              className="w-full bg-gold-500 text-black font-semibold py-3 rounded-xl hover:bg-white transition-colors disabled:opacity-50"
             >
-              {loading ? 'Verifying...' : 'Login to Dashboard'}
+              {loading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 
-          <p className="mt-8 text-center text-xs text-gray-500 uppercase tracking-widest">
-            Ahiajoku Heritage Protection
+          <p className="mt-6 text-center text-gray-400 text-sm">
+            Don't have an account? <Link to="/register" className="text-gold-500 hover:text-white transition-colors">Join Us</Link>
           </p>
         </div>
       </div>

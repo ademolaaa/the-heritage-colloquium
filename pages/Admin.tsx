@@ -8,25 +8,18 @@ import { placeholderImageDataUri } from '../lib/placeholders';
 import { fetchRemoteContent, publishRemoteContent } from '../lib/remoteContent';
 import { mergeWithDefaults } from '../lib/siteContentStore';
 import { DownloadItem, Lecture, PastSpeaker, SponsorTier, BlogPost, LeadershipMember } from '../types';
-
-const SESSION_KEY = 'heritage.admin.unlocked';
-const PASSCODE_KEY = 'heritage.admin.passcode';
-const REMEMBER_KEY = 'heritage.admin.rememberPasscode';
-
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export const Admin: React.FC = () => {
   const navigate = useNavigate();
-  const { isAdmin, setIsAdmin } = useAuth();
+  const { isAdmin, isLoading } = useAuth();
   const { content, setContent, resetToDefaults, exportJson, importJson } = useSiteContent();
-  const [passcode, setPasscode] = useState(() => {
-    if (typeof window === 'undefined') return '';
-    return window.localStorage.getItem('admin_passcode') || window.sessionStorage.getItem(PASSCODE_KEY) || 'change-me';
-  });
+  
   const [message, setMessage] = useState<string | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
-  const [uploadBusy, setUploadBusy] = useState(false); // For bulk uploads
+  const [uploadBusy, setUploadBusy] = useState(false);
   const [bulkResourceNames, setBulkResourceNames] = useState<string[]>([]);
   
   // Autosave state
@@ -34,30 +27,9 @@ export const Admin: React.FC = () => {
   const autoSaveTimerRef = useRef<number | null>(null);
   const lastSavedContentRef = useRef<string>('');
 
-  const uiGatePasscodeRaw = (import.meta as any).env?.VITE_ADMIN_PASSCODE;
-  const uiGatePasscode = typeof uiGatePasscodeRaw === 'string' ? uiGatePasscodeRaw.trim() : '';
-  const requireUiGate = Boolean(uiGatePasscode) && uiGatePasscode !== 'change-me';
-  const isDev = Boolean((import.meta as any).env?.DEV);
-  const readUrl =
-    ((import.meta as any).env?.VITE_CONTENT_READ_URL as string | undefined) || (isDev ? '/api/content' : '/api/content.php');
-  const writeUrl =
-    ((import.meta as any).env?.VITE_CONTENT_WRITE_URL as string | undefined) || (isDev ? '/api/content' : '/api/content.php');
-  const v1ApiBaseUrl = (((import.meta as any).env?.VITE_V1_API_BASE_URL as string | undefined) || '').trim();
-  const mediaUploadUrl = useMemo(() => {
-    if (!isDev) return '/api/media/upload.php';
-    if (!v1ApiBaseUrl) return '/api/v1/media/upload';
-    try {
-      return new URL('/api/v1/media/upload', v1ApiBaseUrl).toString();
-    } catch {
-      return '/api/v1/media/upload';
-    }
-  }, [isDev, v1ApiBaseUrl]);
-
-  const [isUnlocked, setIsUnlocked] = useState(isAdmin);
-
-  useEffect(() => {
-    setIsUnlocked(isAdmin);
-  }, [isAdmin]);
+  const readUrl = 'supabase';
+  const writeUrl = 'supabase';
+  const mediaUploadUrl = 'supabase';
 
   const fieldClass =
     'w-full bg-black/50 border border-white/10 px-4 py-3 text-white placeholder:text-white/50 focus:border-gold-500 focus:outline-none transition-colors font-serif';
@@ -72,40 +44,6 @@ export const Admin: React.FC = () => {
     window.setTimeout(() => setMessage(null), 2400);
   };
 
-  useEffect(() => {
-    // Auto-unlock if using default passcode and no UI gate
-    if (!isUnlocked && passcode === 'change-me' && !requireUiGate) {
-      window.sessionStorage.setItem(SESSION_KEY, '1');
-      setIsUnlocked(true);
-    }
-  }, [isUnlocked, passcode, requireUiGate]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const rememberRaw = window.localStorage.getItem(REMEMBER_KEY);
-    const remember = rememberRaw ? rememberRaw === '1' : true;
-    if (remember) window.sessionStorage.setItem(PASSCODE_KEY, passcode);
-    else window.sessionStorage.removeItem(PASSCODE_KEY);
-  }, [passcode]);
-
-  const requireUnlock = () => {
-    const value = passcode.trim();
-    if (!value) {
-      setToast('Enter passcode');
-      return;
-    }
-    if (requireUiGate && value !== uiGatePasscode) {
-      setToast('Invalid passcode');
-      return;
-    }
-    window.sessionStorage.setItem(SESSION_KEY, '1');
-    localStorage.setItem('is_admin', 'true');
-    localStorage.setItem('admin_passcode', value);
-    setIsAdmin(true);
-    setIsUnlocked(true);
-    setToast('Admin unlocked');
-  };
-
   const copy = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -117,7 +55,7 @@ export const Admin: React.FC = () => {
 
   // Initial Pull on Unlock
   useEffect(() => {
-    if (isUnlocked && readUrl) {
+    if (isAdmin) {
       void (async () => {
         try {
           const payload = await fetchRemoteContent(readUrl);
@@ -132,11 +70,11 @@ export const Admin: React.FC = () => {
         }
       })();
     }
-  }, [isUnlocked, readUrl]);
+  }, [isAdmin, readUrl]);
 
   // Auto-Save Logic
   useEffect(() => {
-    if (!isUnlocked || !writeUrl || !passcode) return;
+    if (!isAdmin) return;
 
     // Skip if content matches last saved
     const currentJson = JSON.stringify(content);
@@ -149,7 +87,7 @@ export const Admin: React.FC = () => {
     setIsAutoSaving(true);
     autoSaveTimerRef.current = window.setTimeout(async () => {
       try {
-        await publishRemoteContent(writeUrl, content, passcode);
+        await publishRemoteContent(writeUrl, content, 'supabase-auth');
         lastSavedContentRef.current = currentJson;
         setToast('Saved');
       } catch (e) {
@@ -163,7 +101,7 @@ export const Admin: React.FC = () => {
     return () => {
       if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
     };
-  }, [content, isUnlocked, writeUrl, passcode]);
+  }, [content, isAdmin, writeUrl]);
 
 
   // Helper to safely extract remote content
@@ -182,48 +120,36 @@ export const Admin: React.FC = () => {
   };
 
   const handleBulkUploadDownloads = async (files: FileList | File[] | null) => {
-    if (!passcode) {
-      setToast('Enter admin passcode');
-      return;
-    }
     if (!files || files.length === 0) return;
     const fileList = Array.from(files);
 
     try {
       setUploadBusy(true);
-      const body = new FormData();
-      for (const file of fileList) body.append('files[]', file);
+      const newDownloads: DownloadItem[] = [];
 
-      const res = await fetch(mediaUploadUrl, {
-        method: 'POST',
-        headers: { 'x-admin-passcode': passcode },
-        body,
-      });
+      for (const file of fileList) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${file.name.replace(/[^a-zA-Z0-9]/g, '_')}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage.from('media').upload(fileName, file);
+        if (uploadError) {
+          setToast(`Upload failed for ${file.name}`);
+          continue;
+        }
 
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        setToast(json?.error || 'Upload failed');
-        return;
-      }
-
-      const items = Array.isArray(json?.items) ? json.items : (json?.item ? [json.item] : []);
-      if (items.length === 0) {
-        setToast('No files returned');
-        return;
-      }
-
-      const newDownloads: DownloadItem[] = items.map((item: any) => {
-        const fileUrl = typeof item?.url === 'string' ? item.url : '';
-        const fullUrl = fileUrl.startsWith('http') ? fileUrl : (v1ApiBaseUrl ? new URL(fileUrl, v1ApiBaseUrl).toString() : fileUrl);
-        return {
-          id: 'dl_' + (item.id || '').replace('med_', '') + '_' + Math.random().toString(36).substr(2, 5),
-          title: item.title || 'Untitled',
+        const { data } = supabase.storage.from('media').getPublicUrl(fileName);
+        
+        newDownloads.push({
+          id: 'dl_' + Math.random().toString(36).substr(2, 9),
+          title: file.name,
           category: 'General',
-          size: formatFileSize(item.sizeBytes || 0),
-          type: (item.mimeType === 'application/pdf' ? 'PDF' : (item.filePath || '').split('.').pop()?.toUpperCase() || 'FILE'),
-          url: fullUrl
-        };
-      });
+          size: formatFileSize(file.size),
+          type: (file.type === 'application/pdf' ? 'PDF' : (fileExt?.toUpperCase() || 'FILE')),
+          url: data.publicUrl
+        });
+      }
+
+      if (newDownloads.length === 0) return;
 
       setContent((c) => ({
         ...c,
@@ -235,7 +161,7 @@ export const Admin: React.FC = () => {
         await publishRemoteContent(writeUrl, {
           ...content,
           downloads: [...newDownloads, ...content.downloads]
-        }, passcode);
+        }, 'supabase');
         setToast(`Uploaded & Saved ${newDownloads.length} files`);
       } catch (e) {
         setToast('Uploaded but save failed: ' + (e instanceof Error ? e.message : 'Unknown error'));
@@ -248,33 +174,16 @@ export const Admin: React.FC = () => {
     }
   };
 
-  if (!isUnlocked) {
+  if (isLoading) {
     return (
-      <Section background="darker" className="pt-40">
-        <div className="max-w-xl mx-auto border border-white/5 bg-charcoal/60 backdrop-blur-sm p-12">
-          <h1 className="font-display text-4xl text-white mb-4">Admin</h1>
-          <p className="text-gray-400 mb-10 leading-relaxed font-light">
-            Enter your admin passcode to edit site content.
-          </p>
-          <div className="space-y-4">
-            <div>
-              <label className={labelClass}>Admin Passcode</label>
-              <input
-                className={fieldClass}
-                type="password"
-                value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
-            <Button className="w-full" onClick={requireUnlock}>
-              Unlock
-            </Button>
-            {message && <div className="text-gold-500 text-xs tracking-widest uppercase">{message}</div>}
-          </div>
-        </div>
+      <Section background="darker" className="pt-40 min-h-screen flex items-center justify-center">
+        <p className="text-white text-xl">Loading Admin Console...</p>
       </Section>
     );
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/login" replace />;
   }
 
   return (

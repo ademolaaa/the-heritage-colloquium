@@ -1,44 +1,35 @@
 import { SiteContent } from '../types';
+import { supabase } from './supabase';
 
 export async function fetchRemoteContent(url: string): Promise<unknown> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 6000);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } finally {
-    window.clearTimeout(timeout);
+  const { data, error } = await supabase
+    .from('site_settings')
+    .select('content')
+    .eq('id', 1)
+    .single();
+
+  if (error) {
+    // If the table is empty or missing, just return null so it falls back to defaults
+    if (error.code === 'PGRST116') {
+      return null;
+    }
+    console.error('Fetch error:', error.message);
+    throw new Error(error.message);
   }
+  return data?.content;
 }
 
 export async function publishRemoteContent(url: string, content: SiteContent, passcode: string): Promise<void> {
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'content-type': 'application/json',
-      'x-admin-passcode': passcode,
-    },
-    body: JSON.stringify(content),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `HTTP ${res.status}`);
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ id: 1, content });
+
+  if (error) {
+    throw new Error(error.message);
   }
 }
 
 export async function rotateRemotePasscode(url: string, currentPasscode: string, newPasscode: string): Promise<void> {
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'content-type': 'application/json',
-      'x-admin-passcode': currentPasscode,
-    },
-    body: JSON.stringify({ newPasscode }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `HTTP ${res.status}`);
-  }
+  // Note: Since we moved to Supabase Auth, manual passcodes are no longer needed here.
+  return Promise.resolve();
 }
-
