@@ -1636,74 +1636,87 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
       for (const entry of files) {
         const filePath = entry.entryName;
         const filename = path.basename(filePath);
-        
-        // Deduplication check: match exact filename and size or file_path
-        const zipPath = `zip://${req.file.originalname}/${filePath}`;
-        const dupCheck = await pgDb.query('SELECT id FROM media WHERE file_path = $1', [zipPath]);
-        if (dupCheck.rowCount > 0) {
-          log(`⏭️ Skipping "${filename}" (already exists as ${zipPath}).`);
-          skippedCount++;
-          continue;
-        }
-
-        const ext = path.extname(filename).toLowerCase();
-        
-        // Map types and mime
-        let type = 'file';
-        let mime = 'application/octet-stream';
-        const mimeMap = {
-          '.jpg': { type: 'image', mime: 'image/jpeg' },
-          '.jpeg': { type: 'image', mime: 'image/jpeg' },
-          '.png': { type: 'image', mime: 'image/png' },
-          '.gif': { type: 'image', mime: 'image/gif' },
-          '.svg': { type: 'image', mime: 'image/svg+xml' },
-          '.webp': { type: 'image', mime: 'image/webp' },
-          '.pdf': { type: 'pdf', mime: 'application/pdf' },
-          '.mp4': { type: 'video', mime: 'video/mp4' },
-          '.webm': { type: 'video', mime: 'video/webm' },
-          '.mp3': { type: 'audio', mime: 'audio/mpeg' },
-          '.wav': { type: 'audio', mime: 'audio/wav' },
-        };
-        if (mimeMap[ext]) {
-          type = mimeMap[ext].type;
-          mime = mimeMap[ext].mime;
-        }
-
-        // Categorize based on folder structure
-        let category = 'general';
-        const pathLower = filePath.toLowerCase();
-        if (pathLower.includes('speaker') || pathLower.includes('portrait')) {
-          category = 'speaker_portrait';
-        } else if (pathLower.includes('lecture') || pathLower.includes('paper')) {
-          category = 'lecture_paper';
-        } else if (pathLower.includes('gallery') || pathLower.includes('photo') || pathLower.includes('picture')) {
-          category = 'gallery';
-        } else if (pathLower.includes('resource') || pathLower.includes('download')) {
-          category = 'resource';
-        }
-
-        log(`⏳ Uploading [${category.toUpperCase()}] "${filename}"...`);
-
         const fileBuffer = entry.getData();
         const sizeBytes = fileBuffer.length;
+        const ext = path.extname(filename).toLowerCase();
+        
+        const zipPath = `zip://${req.file.originalname}/${filePath}`;
+        
+        let id;
+        let publicUrl;
+        let type = 'file';
+        let category = 'general';
+        let isDuplicate = false;
 
-        const id = createId('med');
-        const cleanExt = ext.replace(/[^a-z0-9.]/g, '');
-        const storagePath = `${type}s/${id}${cleanExt}`;
-        const bucket = 'media';
-
-        // 1. Upload to Supabase Storage
-        const { publicUrl } = await uploadToStorage(fileBuffer, storagePath, mime);
-
-        // 2. Register in PostgreSQL
-        await pgDb.query(
-          `INSERT INTO media 
-            (id, type, title, url, file_path, storage_bucket, storage_path, mime_type, size_bytes, category, created_at, updated_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
-          [id, type, filename, publicUrl, zipPath, bucket, storagePath, mime, sizeBytes, category]
+        // Deduplication check: match exact zipPath or same filename and size in database
+        const dupCheck = await pgDb.query(
+          'SELECT id, url, category, type FROM media WHERE file_path = $1 OR (title = $2 AND size_bytes = $3)', 
+          [zipPath, filename, sizeBytes]
         );
-        log(`   ✅ Uploaded and registered: ${publicUrl}`);
-        uploadCount++;
+
+        if (dupCheck.rowCount > 0) {
+          const existingMedia = dupCheck.rows[0];
+          id = existingMedia.id;
+          publicUrl = existingMedia.url;
+          category = existingMedia.category || 'general';
+          type = existingMedia.type || 'file';
+          log(`⏭️ Skipping upload for duplicate "${filename}" (already registered as ${id}).`);
+          skippedCount++;
+          isDuplicate = true;
+        } else {
+          // Map types and mime
+          let mime = 'application/octet-stream';
+          const mimeMap = {
+            '.jpg': { type: 'image', mime: 'image/jpeg' },
+            '.jpeg': { type: 'image', mime: 'image/jpeg' },
+            '.png': { type: 'image', mime: 'image/png' },
+            '.gif': { type: 'image', mime: 'image/gif' },
+            '.svg': { type: 'image', mime: 'image/svg+xml' },
+            '.webp': { type: 'image', mime: 'image/webp' },
+            '.pdf': { type: 'pdf', mime: 'application/pdf' },
+            '.mp4': { type: 'video', mime: 'video/mp4' },
+            '.webm': { type: 'video', mime: 'video/webm' },
+            '.mp3': { type: 'audio', mime: 'audio/mpeg' },
+            '.wav': { type: 'audio', mime: 'audio/wav' },
+          };
+          if (mimeMap[ext]) {
+            type = mimeMap[ext].type;
+            mime = mimeMap[ext].mime;
+          }
+
+          // Categorize based on folder structure
+          const pathLower = filePath.toLowerCase();
+          if (pathLower.includes('speaker') || pathLower.includes('portrait')) {
+            category = 'speaker_portrait';
+          } else if (pathLower.includes('lecture') || pathLower.includes('paper')) {
+            category = 'lecture_paper';
+          } else if (pathLower.includes('gallery') || pathLower.includes('photo') || pathLower.includes('picture')) {
+            category = 'gallery';
+          } else if (pathLower.includes('resource') || pathLower.includes('download')) {
+            category = 'resource';
+          }
+
+          log(`⏳ Uploading [${category.toUpperCase()}] "${filename}"...`);
+
+          id = createId('med');
+          const cleanExt = ext.replace(/[^a-z0-9.]/g, '');
+          const storagePath = `${type}s/${id}${cleanExt}`;
+          const bucket = 'media';
+
+          // 1. Upload to Supabase Storage
+          const uploadResult = await uploadToStorage(fileBuffer, storagePath, mime);
+          publicUrl = uploadResult.publicUrl;
+
+          // 2. Register in PostgreSQL
+          await pgDb.query(
+            `INSERT INTO media 
+              (id, type, title, url, file_path, storage_bucket, storage_path, mime_type, size_bytes, category, created_at, updated_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+            [id, type, filename, publicUrl, zipPath, bucket, storagePath, mime, sizeBytes, category]
+          );
+          log(`   ✅ Uploaded and registered: ${publicUrl}`);
+          uploadCount++;
+        }
 
         // 3. Smart Matching: Lectures
         const yearMatch = filename.match(/\b(19\d{2}|20\d{2})\b/);
@@ -1715,11 +1728,11 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
             if (category === 'speaker_portrait' || type === 'image') {
               await pgDb.query(`UPDATE lectures SET image = $1, updated_at = NOW() WHERE id = $2`, [publicUrl, lecture.id]);
               log(`   🔗 Linked speaker portrait to Lecture of ${year} ("${lecture.speaker}")`);
-              linkedLectures++;
+              if (!isDuplicate) linkedLectures++;
             } else if (category === 'lecture_paper' || type === 'pdf') {
               await pgDb.query(`UPDATE lectures SET pdf_url = $1, updated_at = NOW() WHERE id = $2`, [publicUrl, lecture.id]);
               log(`   🔗 Linked lecture paper PDF to Lecture of ${year} ("${lecture.title}")`);
-              linkedLectures++;
+              if (!isDuplicate) linkedLectures++;
             }
           }
         }
@@ -1742,13 +1755,22 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
             albumId = albumResult.rows[0].id;
           }
 
-          const galleryItemId = createId('gal_item');
-          await pgDb.query(
-            `INSERT INTO gallery (id, title, description, media_id, category, created_at) VALUES ($1, $2, $3, $4, $5, NOW())`,
-            [galleryItemId, filename, `Photo from ZIP archive folder ${folderName}`, id, folderName]
+          // Check if photo is already linked to this album to prevent duplicate links
+          const galleryLinkCheck = await pgDb.query(
+            `SELECT id FROM gallery WHERE media_id = $1 AND category = $2`,
+            [id, folderName]
           );
-          log(`   🖼️ Linked photo to album "${folderName}"`);
-          addedToGallery++;
+          if (galleryLinkCheck.rowCount === 0) {
+            const galleryItemId = createId('gal_item');
+            await pgDb.query(
+              `INSERT INTO gallery (id, title, description, media_id, category, created_at) VALUES ($1, $2, $3, $4, $5, NOW())`,
+              [galleryItemId, filename, `Photo from ZIP archive folder ${folderName}`, id, folderName]
+            );
+            log(`   🖼️ Linked photo to album "${folderName}"`);
+            if (!isDuplicate) addedToGallery++;
+          } else {
+            log(`   ⏭️ Photo already linked to album "${folderName}". Skipping duplicate link.`);
+          }
         }
       }
 
