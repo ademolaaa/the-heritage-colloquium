@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createAdminAuth } from './lib/adminAuth.js';
 import { createDb } from './lib/db.js';
 import { initDb, db as pgDb } from './lib/postgres.js';
+import { runAutoRepair } from './lib/repair.js';
 import { createV1Router } from './routes/v1.js';
 import { createSocialRouter } from './routes/social.js';
 import { createQARouter } from './routes/qa.js';
@@ -18,7 +19,9 @@ import { securityHeaders, globalLimiter } from './middleware/security.js';
 dotenv.config();
 
 // Initialize Database
-initDb().catch(console.error);
+initDb().then(() => {
+  runAutoRepair().catch(console.error);
+}).catch(console.error);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

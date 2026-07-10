@@ -1663,6 +1663,14 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
           log(`⏭️ Skipping upload for duplicate "${filename}" (already registered as ${id}).`);
           skippedCount++;
           isDuplicate = true;
+
+          // If the file was previously classified as general, but should be gallery, upgrade it
+          const folders = filePath.split('/');
+          if (category === 'general' && type === 'image' && folders.length > 1) {
+            category = 'gallery';
+            await pgDb.query("UPDATE media SET category = 'gallery', updated_at = NOW() WHERE id = $1", [id]);
+            log(`   🔄 Upgraded duplicate media "${filename}" category to 'gallery'.`);
+          }
         } else {
           // Map types and mime
           let mime = 'application/octet-stream';
@@ -1686,6 +1694,7 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
 
           // Categorize based on folder structure
           const pathLower = filePath.toLowerCase();
+          const folders = filePath.split('/');
           if (pathLower.includes('speaker') || pathLower.includes('portrait')) {
             category = 'speaker_portrait';
           } else if (pathLower.includes('lecture') || pathLower.includes('paper')) {
@@ -1694,6 +1703,9 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
             category = 'gallery';
           } else if (pathLower.includes('resource') || pathLower.includes('download')) {
             category = 'resource';
+          } else if (type === 'image' && folders.length > 1) {
+            // Default image files nested inside a folder to 'gallery'
+            category = 'gallery';
           }
 
           log(`⏳ Uploading [${category.toUpperCase()}] "${filename}"...`);
