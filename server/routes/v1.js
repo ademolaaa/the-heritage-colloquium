@@ -37,6 +37,31 @@ function isIsoDate(value) {
   return Number.isFinite(d.getTime()) && value.includes('T');
 }
 
+function getFolderCategory(filePath) {
+  const parts = filePath.split('/').filter(p => p.trim() !== '');
+  if (parts.length <= 1) return 'General Gallery';
+
+  // The immediate parent folder
+  let parentIndex = parts.length - 2;
+  let folderName = parts[parentIndex];
+
+  // If the parent folder is a generic term (like 'gallery', 'photos', 'images', 'speakers', 'lectures')
+  // and there is a grandparent folder, use the grandparent instead
+  const genericFolders = ['gallery', 'photos', 'images', 'speakers', 'lectures', 'uploads', 'media', 'general'];
+  if (genericFolders.includes(folderName.toLowerCase()) && parentIndex > 0) {
+    folderName = parts[parentIndex - 1];
+  }
+
+  // Also clean up any common zip/mac export suffixes or wrappers
+  // e.g. "AHIAJOKU ARTS & CRAFTS-20260710T125851Z-2-001" -> "AHIAJOKU ARTS & CRAFTS"
+  folderName = folderName
+    .replace(/-\d{8}T\d{6}Z.*$/, '') // Remove Google Drive style archive export suffix
+    .replace(/\.zip$/i, '')          // Remove any .zip suffix
+    .trim();
+
+  return folderName || 'General Gallery';
+}
+
 function requireAdmin(verifyAdminPasscode) {
   return async (req, res, next) => {
     const passcode = String(req.header('x-admin-passcode') || '');
@@ -1642,6 +1667,8 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
         
         const zipPath = `zip://${req.file.originalname}/${filePath}`;
         
+        log(`📦 Extracting file: "${filePath}" (filename: "${filename}")`);
+
         let id;
         let publicUrl;
         let type = 'file';
@@ -1665,8 +1692,8 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
           isDuplicate = true;
 
           // If the file was previously classified as general, but should be gallery, upgrade it
-          const folders = filePath.split('/');
-          if (category === 'general' && type === 'image' && folders.length > 1) {
+          const folderName = getFolderCategory(filePath);
+          if (category === 'general' && type === 'image' && folderName !== 'General Gallery') {
             category = 'gallery';
             await pgDb.query("UPDATE media SET category = 'gallery', updated_at = NOW() WHERE id = $1", [id]);
             log(`   🔄 Upgraded duplicate media "${filename}" category to 'gallery'.`);
@@ -1694,7 +1721,7 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
 
           // Categorize based on folder structure
           const pathLower = filePath.toLowerCase();
-          const folders = filePath.split('/');
+          const folderName = getFolderCategory(filePath);
           if (pathLower.includes('speaker') || pathLower.includes('portrait')) {
             category = 'speaker_portrait';
           } else if (pathLower.includes('lecture') || pathLower.includes('paper')) {
@@ -1703,7 +1730,7 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
             category = 'gallery';
           } else if (pathLower.includes('resource') || pathLower.includes('download')) {
             category = 'resource';
-          } else if (type === 'image' && folders.length > 1) {
+          } else if (type === 'image' && folderName !== 'General Gallery') {
             // Default image files nested inside a folder to 'gallery'
             category = 'gallery';
           }
@@ -1751,8 +1778,7 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
 
         // 4. Smart Matching: Galleries
         if (category === 'gallery') {
-          const folders = filePath.split('/');
-          const folderName = folders.length > 1 ? folders[folders.length - 2] : 'General Gallery';
+          const folderName = getFolderCategory(filePath);
           
           let albumResult = await pgDb.query(`SELECT id FROM gallery WHERE title = $1`, [folderName]);
           let albumId;

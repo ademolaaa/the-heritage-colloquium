@@ -1,6 +1,31 @@
 import { db as pgDb } from './postgres.js';
 import { createId } from './jsonStore.js';
 
+function getFolderCategory(filePath) {
+  const parts = filePath.split('/').filter(p => p.trim() !== '');
+  if (parts.length <= 1) return 'General Gallery';
+
+  // The immediate parent folder
+  let parentIndex = parts.length - 2;
+  let folderName = parts[parentIndex];
+
+  // If the parent folder is a generic term (like 'gallery', 'photos', 'images', 'speakers', 'lectures')
+  // and there is a grandparent folder, use the grandparent instead
+  const genericFolders = ['gallery', 'photos', 'images', 'speakers', 'lectures', 'uploads', 'media', 'general'];
+  if (genericFolders.includes(folderName.toLowerCase()) && parentIndex > 0) {
+    folderName = parts[parentIndex - 1];
+  }
+
+  // Also clean up any common zip/mac export suffixes or wrappers
+  // e.g. "AHIAJOKU ARTS & CRAFTS-20260710T125851Z-2-001" -> "AHIAJOKU ARTS & CRAFTS"
+  folderName = folderName
+    .replace(/-\d{8}T\d{6}Z.*$/, '') // Remove Google Drive style archive export suffix
+    .replace(/\.zip$/i, '')          // Remove any .zip suffix
+    .trim();
+
+  return folderName || 'General Gallery';
+}
+
 export async function runAutoRepair() {
   console.log('[AUTO-REPAIR] Starting database gallery auto-repair...');
   try {
@@ -16,14 +41,12 @@ export async function runAutoRepair() {
 
       const zipPath = row.file_path;
       const pathPart = zipPath.replace(/^zip:\/\/[^\/]+\//, '');
-      const folders = pathPart.split('/');
-      
-      if (folders.length <= 1) {
+      const folderName = getFolderCategory(pathPart);
+      const filename = row.title;
+
+      if (folderName === 'General Gallery') {
         continue;
       }
-
-      const folderName = folders[folders.length - 2];
-      const filename = folders[folders.length - 1];
 
       if (row.category !== 'gallery') {
         await pgDb.query("UPDATE media SET category = 'gallery', updated_at = NOW() WHERE id = $1", [row.id]);
