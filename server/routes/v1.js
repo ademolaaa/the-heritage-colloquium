@@ -1786,7 +1786,7 @@ export function createV1Router({ verifyAdminPasscode, uploadsDir }) {
             albumId = createId('gal');
             await pgDb.query(
               `INSERT INTO gallery (id, title, description, category, created_at) VALUES ($1, $2, $3, $4, NOW())`,
-              [albumId, folderName, `Album synchronized from ZIP archive folder "${folderName}"`, 'Events']
+              [albumId, folderName, 'Click to open and view the full gallery collection.', 'Events']
             );
             log(`   🖼️ Created new Gallery Album: "${folderName}"`);
           } else {

@@ -29,6 +29,12 @@ function getFolderCategory(filePath) {
 export async function runAutoRepair() {
   console.log('[AUTO-REPAIR] Starting database gallery auto-repair...');
   try {
+    // Automatically clean up legacy album descriptions
+    await pgDb.query(
+      `UPDATE gallery SET description = 'Click to open and view the full gallery collection.' 
+       WHERE description LIKE 'Album synchronized from%'`
+    );
+
     const result = await pgDb.query("SELECT id, type, title, file_path, category FROM media WHERE file_path LIKE 'zip://%'");
     let fixedCount = 0;
     let albumCreatedCount = 0;
@@ -60,7 +66,7 @@ export async function runAutoRepair() {
         albumId = createId('gal');
         await pgDb.query(
           "INSERT INTO gallery (id, title, description, category, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW())",
-          [albumId, folderName, `Album synchronized from ZIP archive folder "${folderName}"`, 'Events']
+          [albumId, folderName, 'Click to open and view the full gallery collection.', 'Events']
         );
         console.log(`[AUTO-REPAIR] Created new Gallery Album: "${folderName}"`);
         albumCreatedCount++;

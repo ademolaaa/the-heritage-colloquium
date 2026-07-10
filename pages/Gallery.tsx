@@ -217,6 +217,10 @@ export const Gallery: React.FC = () => {
                         <p className="text-gray-400 text-sm line-clamp-2">
                           {gallery.description}
                         </p>
+                        <div className="text-gold-500 text-xs font-semibold uppercase tracking-wider group-hover:text-white transition-colors flex items-center gap-1.5 mt-4">
+                          <span>Click to open and view more pictures</span>
+                          <span className="group-hover:translate-x-1 transition-transform">→</span>
+                        </div>
                       </div>
                     </div>
                   );
