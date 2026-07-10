@@ -19,25 +19,20 @@ export const Gallery: React.FC = () => {
   const [lightboxZoom, setLightboxZoom] = useState(1);
   const lightboxVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  const isDev = Boolean((import.meta as any).env?.DEV);
   const v1ApiBaseUrl = (((import.meta as any).env?.VITE_V1_API_BASE_URL as string | undefined) || '').trim();
   
   const getApiUrl = (path: string) => {
-    if (!isDev) {
-      if (path === '/gallery') return '/api/gallery/index.php';
-      if (path === '/media') return '/api/media/index.php';
-      return `/api${path}`;
-    }
-    if (!v1ApiBaseUrl) return `/api/v1${path}`;
+    const fullPath = path === '/gallery' ? '/api/v1/gallery' : '/api/media';
+    if (!v1ApiBaseUrl) return fullPath;
     try {
-      return new URL(`/api/v1${path}`, v1ApiBaseUrl).toString();
+      return new URL(fullPath, v1ApiBaseUrl).toString();
     } catch {
-      return `/api/v1${path}`;
+      return fullPath;
     }
   };
 
-  const galleryApiUrl = useMemo(() => getApiUrl('/gallery'), [isDev, v1ApiBaseUrl]);
-  const mediaApiUrl = useMemo(() => getApiUrl('/media'), [isDev, v1ApiBaseUrl]);
+  const galleryApiUrl = useMemo(() => getApiUrl('/gallery'), [v1ApiBaseUrl]);
+  const mediaApiUrl = useMemo(() => getApiUrl('/media'), [v1ApiBaseUrl]);
 
   useEffect(() => {
     const load = async () => {

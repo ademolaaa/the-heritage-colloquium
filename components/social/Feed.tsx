@@ -133,10 +133,10 @@ export const SocialFeed: React.FC = () => {
                   id: post.id,
                   author: post.author_name || 'Anonymous',
                   content: post.content,
-                  mediaId: post.media_ids && post.media_ids.length > 0 ? post.media_ids[0] : undefined,
                   likesCount: post.likes_count,
                   commentsCount: post.comments_count,
-                  createdAt: post.created_at || post.createdAt
+                  createdAt: post.created_at || post.createdAt,
+                  media_items: post.media_items || []
                 }} 
                 onLike={handleLike}
                 onAddComment={handleAddComment}

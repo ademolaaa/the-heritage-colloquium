@@ -232,6 +232,7 @@ export interface GalleryItem {
   year?: number;
   eventId?: string;
   mediaIds: string[];
+  coverImage?: string;
   createdAt?: string;
   updatedAt?: string;
 }

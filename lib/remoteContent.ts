@@ -4,8 +4,8 @@ import { supabase } from './supabase';
 export async function fetchRemoteContent(url: string): Promise<unknown> {
   const { data, error } = await supabase
     .from('site_settings')
-    .select('content')
-    .eq('id', 1)
+    .select('value')
+    .eq('key', 'main')
     .single();
 
   if (error) {
@@ -16,13 +16,13 @@ export async function fetchRemoteContent(url: string): Promise<unknown> {
     console.error('Fetch error:', error.message);
     throw new Error(error.message);
   }
-  return data?.content;
+  return data?.value;
 }
 
 export async function publishRemoteContent(url: string, content: SiteContent, passcode: string): Promise<void> {
   const { error } = await supabase
     .from('site_settings')
-    .upsert({ id: 1, content });
+    .upsert({ key: 'main', value: content });
 
   if (error) {
     throw new Error(error.message);

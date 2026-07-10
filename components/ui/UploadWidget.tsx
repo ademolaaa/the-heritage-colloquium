@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { uploadFile } from '../../lib/upload';
+import { supabase } from '../../lib/supabase';
 
 interface UploadWidgetProps {
   title: string;
   description: string;
   accept?: string;
   s3BucketName?: string;
-  passcode: string;
+  passcode?: string;
   onUploadComplete?: (item: any) => void;
 }
 
@@ -35,10 +36,32 @@ export const UploadWidget: React.FC<UploadWidgetProps> = ({
     setUploadStatus('uploading');
     let okCount = 0;
     for (const item of pending) {
-      const result = await uploadFile(item.file, passcode, '', item.label);
-      if (result.ok) {
-        okCount += 1;
-        onUploadComplete?.(result.item);
+      if (passcode) {
+        const result = await uploadFile(item.file, passcode, '', item.label);
+        if (result.ok) {
+          okCount += 1;
+          onUploadComplete?.(result.item);
+        }
+      } else {
+        try {
+          const fileExt = item.file.name.split('.').pop();
+          const fileName = `${item.label.replace(/[^a-zA-Z0-9]/g, '_')}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+          const filePath = `${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('media')
+            .upload(filePath, item.file);
+
+          if (uploadError) {
+            console.error('Supabase upload error:', uploadError);
+          } else {
+            const { data } = supabase.storage.from('media').getPublicUrl(filePath);
+            okCount += 1;
+            onUploadComplete?.({ url: data.publicUrl, title: item.label });
+          }
+        } catch (e) {
+          console.error('Direct upload failed:', e);
+        }
       }
     }
     setUploadStatus(okCount === pending.length ? 'success' : 'error');

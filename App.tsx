@@ -14,8 +14,6 @@ import { BlogPost } from './pages/BlogPost';
 import { Gallery } from './pages/Gallery';
 import { Programs } from './pages/Programs';
 import { Admin } from './pages/Admin';
-import { AdminGallery } from './pages/AdminGallery';
-import { AdminUploads } from './pages/AdminUploads';
 import { SocialFeed } from './components/social/Feed';
 import { AskAhiajoku } from './components/qa/AskAhiajoku';
 import { AuthProvider } from './context/AuthContext';
@@ -23,6 +21,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Profile } from './pages/Profile';
 import { MediaLibrary } from './pages/MediaLibrary';
+import { AdminSetup } from './pages/AdminSetup';
 
 function App() {
   return (
@@ -51,8 +50,10 @@ function App() {
               <Route path="admin">
                 <Route index element={<Navigate to="console" replace />} />
                 <Route path="console" element={<Admin />} />
-                <Route path="gallery" element={<AdminGallery />} />
-                <Route path="uploads" element={<AdminUploads />} />
+                <Route path="gallery" element={<Navigate to="/admin/console?tab=gallery" replace />} />
+                <Route path="uploads" element={<Navigate to="/admin/console?tab=uploads" replace />} />
+                <Route path="integrations" element={<Navigate to="/admin/console?tab=integrations" replace />} />
+                <Route path="setup" element={<AdminSetup />} />
               </Route>
             </Route>
           </Routes>

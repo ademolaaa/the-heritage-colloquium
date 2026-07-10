@@ -341,6 +341,8 @@ export const Layout: React.FC = () => {
                   { label: 'Archive', path: '/lectures' },
                   { label: 'Repository', path: '/resources' },
                   { label: 'Support', path: '/sponsors' },
+                  { label: 'Admin Console', path: '/admin/console' },
+                  { label: 'Admin Setup', path: '/admin/setup' },
                 ].map((link) => (
                   <li key={link.path}>
                     <NavLink to={link.path} className="text-gray-500 hover:text-gold-400 transition-colors text-sm">

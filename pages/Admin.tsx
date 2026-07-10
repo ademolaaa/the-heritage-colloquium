@@ -8,12 +8,17 @@ import { placeholderImageDataUri } from '../lib/placeholders';
 import { fetchRemoteContent, publishRemoteContent } from '../lib/remoteContent';
 import { mergeWithDefaults } from '../lib/siteContentStore';
 import { DownloadItem, Lecture, PastSpeaker, SponsorTier, BlogPost, LeadershipMember } from '../types';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { AdminUsers } from '../components/admin/AdminUsers';
+import { AdminUploads } from './AdminUploads';
+import { AdminGallery } from './AdminGallery';
+import { AdminIntegrations } from './AdminIntegrations';
 
 export const Admin: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, isLoading } = useAuth();
   const { content, setContent, resetToDefaults, exportJson, importJson } = useSiteContent();
   
@@ -21,6 +26,8 @@ export const Admin: React.FC = () => {
   const [publishBusy, setPublishBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [bulkResourceNames, setBulkResourceNames] = useState<string[]>([]);
+  
+  const activeTab = searchParams.get('tab') || 'content';
   
   // Autosave state
   const [isAutoSaving, setIsAutoSaving] = useState(false);
@@ -30,6 +37,7 @@ export const Admin: React.FC = () => {
   const readUrl = 'supabase';
   const writeUrl = 'supabase';
   const mediaUploadUrl = 'supabase';
+  const passcode = '';
 
   const fieldClass =
     'w-full bg-black/50 border border-white/10 px-4 py-3 text-white placeholder:text-white/50 focus:border-gold-500 focus:outline-none transition-colors font-serif';
@@ -195,49 +203,99 @@ export const Admin: React.FC = () => {
               <h1 className="font-display text-5xl text-white mb-3">Admin Console</h1>
               <div className="flex items-center gap-3">
                  <p className="text-gray-400 font-light max-w-3xl leading-relaxed">
-                   Changes are saved automatically as you edit.
+                   Manage your website content, media files, and integrations.
                  </p>
-                 {isAutoSaving && <span className="text-gold-500 text-xs uppercase tracking-widest animate-pulse">Saving...</span>}
-              </div>
-              
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="border border-white/5 bg-black/20 p-5">
-                  <div className="text-white font-semibold mb-1">1) Edit</div>
-                  <div className="text-gray-500 font-light leading-relaxed">Open a section below and update the fields.</div>
-                </div>
-                <div className="border border-white/5 bg-black/20 p-5">
-                  <div className="text-white font-semibold mb-1">2) Upload media</div>
-                  <div className="text-gray-500 font-light leading-relaxed">Use Upload buttons (or the Uploads page) to get a link.</div>
-                </div>
+                 {activeTab === 'content' && isAutoSaving && <span className="text-gold-500 text-xs uppercase tracking-widest animate-pulse">Saving...</span>}
               </div>
               {message && <div className="mt-4 text-gold-500 text-xs tracking-widest uppercase">{message}</div>}
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => navigate('/admin/gallery')}>
+            <div className="flex gap-3 flex-wrap">
+              <Button
+                variant={activeTab === 'content' ? 'primary' : 'outline'}
+                onClick={() => setSearchParams({ tab: 'content' })}
+              >
+                Content Editor
+              </Button>
+              <Button
+                variant={activeTab === 'gallery' ? 'primary' : 'outline'}
+                onClick={() => setSearchParams({ tab: 'gallery' })}
+              >
                 Galleries
               </Button>
-              <Button variant="outline" onClick={() => navigate('/admin/uploads')}>
+              <Button
+                variant={activeTab === 'uploads' ? 'primary' : 'outline'}
+                onClick={() => setSearchParams({ tab: 'uploads' })}
+              >
                 Uploads
               </Button>
               <Button
-                variant="outline"
-                onClick={() => {
-                  resetToDefaults();
-                  setToast('Reset to defaults');
-                }}
+                variant={activeTab === 'integrations' ? 'primary' : 'outline'}
+                onClick={() => setSearchParams({ tab: 'integrations' })}
               >
-                Reset
+                Integrations
               </Button>
+              <Button
+                variant={activeTab === 'users' ? 'primary' : 'outline'}
+                onClick={() => setSearchParams({ tab: 'users' })}
+              >
+                👥 Users
+              </Button>
+              {activeTab === 'content' && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (confirm('Reset all content fields to defaults?')) {
+                      resetToDefaults();
+                      setToast('Reset to defaults');
+                    }
+                  }}
+                >
+                  Reset Content
+                </Button>
+              )}
             </div>
           </div>
-          
-          {writeUrl && (
-            <div className="hidden">
-              {/* Passcode change moved to dedicated page: /admin/change-passcode */}
+
+          {activeTab === 'content' && (
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="border border-white/5 bg-black/20 p-5">
+                <div className="text-white font-semibold mb-1">1) Edit</div>
+                <div className="text-gray-500 font-light leading-relaxed">Open a section below and update the fields.</div>
+              </div>
+              <div className="border border-white/5 bg-black/20 p-5">
+                <div className="text-white font-semibold mb-1">2) Upload media</div>
+                <div className="text-gray-500 font-light leading-relaxed">Use Upload buttons (or the Uploads page) to get a link.</div>
+              </div>
             </div>
           )}
 
-          <details className="mt-12 border border-white/5 bg-charcoal/50 p-8">
+          {activeTab === 'gallery' && (
+            <div className="mt-8">
+              <AdminGallery embedded={true} />
+            </div>
+          )}
+
+          {activeTab === 'uploads' && (
+            <div className="mt-8">
+              <AdminUploads embedded={true} />
+            </div>
+          )}
+
+          {activeTab === 'integrations' && (
+            <div className="mt-8">
+              <AdminIntegrations embedded={true} />
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="mt-8 border border-white/5 bg-charcoal/50 p-8 rounded-lg">
+              <AdminUsers />
+            </div>
+          )}
+
+          {activeTab === 'content' && (
+            <div className="mt-12 space-y-0">
+              <details className="border border-white/5 bg-charcoal/50 p-8">
             <summary className="cursor-pointer select-none text-white font-display text-2xl">Global Background</summary>
             <div className={`mt-4 ${helpClass}`}>Set a background image or video that appears across the entire site.</div>
             <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1360,6 +1418,8 @@ export const Admin: React.FC = () => {
               </div>
             </div>
           </details>
+          </div>
+          )}
         </div>
       </div>
     </>

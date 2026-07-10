@@ -204,5 +204,81 @@ export function createAuthRouter() {
     }
   });
 
+  // PUT /me - Update current user profile
+  router.put('/me', requireAuth, async (req, res) => {
+    if (!requireObjectBody(req)) return jsonError(res, 400, 'Invalid body');
+
+    const username = req.body.username?.trim();
+    const fullName = req.body.fullName?.trim();
+    const avatarUrl = req.body.avatarUrl?.trim();
+
+    if (!username) {
+      return jsonError(res, 400, 'Username is required');
+    }
+
+    try {
+      const existing = await db.query(
+        'SELECT id FROM users WHERE username = $1 AND id <> $2',
+        [username, req.user.id]
+      );
+      if (existing.rowCount > 0) {
+        return jsonError(res, 409, 'Username is already taken');
+      }
+
+      const result = await db.query(
+        `UPDATE users 
+         SET username = $1, full_name = $2, avatar_url = $3, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $4
+         RETURNING id, email, username, full_name, avatar_url, role`,
+        [username, fullName || null, avatarUrl || null, req.user.id]
+      );
+
+      if (result.rowCount === 0) {
+        return jsonError(res, 404, 'User not found');
+      }
+
+      res.json({ ok: true, user: result.rows[0] });
+    } catch (err) {
+      console.error('Update profile failed:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
+  });
+
+  // GET /me/stats - Get stats for current user
+  router.get('/me/stats', requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+
+      // 1. Count posts
+      const postsRes = await db.query('SELECT COUNT(*)::int as count FROM posts WHERE user_id = $1', [userId]);
+      const postsCount = postsRes.rows[0]?.count || 0;
+
+      // 2. Count likes received
+      const likesRes = await db.query('SELECT COALESCE(SUM(likes_count), 0)::int as total FROM posts WHERE user_id = $1', [userId]);
+      const likesCount = likesRes.rows[0]?.total || 0;
+
+      // 3. Count questions asked
+      const questionsRes = await db.query('SELECT COUNT(*)::int as count FROM questions WHERE user_email = $1', [req.user.email]);
+      const questionsCount = questionsRes.rows[0]?.count || 0;
+
+      // 4. Count comments written
+      const commentsRes = await db.query('SELECT COUNT(*)::int as count FROM comments WHERE user_id = $1', [userId]);
+      const commentsCount = commentsRes.rows[0]?.count || 0;
+
+      res.json({
+        ok: true,
+        stats: {
+          postsCount,
+          likesCount,
+          questionsCount,
+          commentsCount
+        }
+      });
+    } catch (err) {
+      console.error('Fetch stats failed:', err);
+      jsonError(res, 500, 'Internal Server Error');
+    }
+  });
+
   return router;
 }

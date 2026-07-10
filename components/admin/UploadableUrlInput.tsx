@@ -10,8 +10,8 @@ type Props = {
   accept?: string;
   fieldClass: string;
   labelClass: string;
-  passcode: string;
-  uploadUrl: string;
+  passcode?: string;
+  uploadUrl?: string;
   onToast: (text: string) => void;
 };
 

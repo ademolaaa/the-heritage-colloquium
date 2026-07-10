@@ -7,7 +7,12 @@ const PASSCODE_KEY = 'heritage.admin.passcode';
 const REMEMBER_KEY = 'heritage.admin.rememberPasscode';
 const AUTOUPLOAD_KEY = 'heritage.admin.autoUpload';
 
-export const AdminUploads: React.FC = () => {
+interface AdminUploadsProps {
+  embedded?: boolean;
+  passcodeProp?: string;
+}
+
+export const AdminUploads: React.FC<AdminUploadsProps> = ({ embedded = false, passcodeProp }) => {
   const [rememberPasscode, setRememberPasscode] = useState(() => {
     if (typeof window === 'undefined') return true;
     const value = window.localStorage.getItem(REMEMBER_KEY);
@@ -22,6 +27,13 @@ export const AdminUploads: React.FC = () => {
     if (typeof window === 'undefined') return '';
     return window.sessionStorage.getItem(PASSCODE_KEY) || '';
   });
+
+  useEffect(() => {
+    if (passcodeProp !== undefined) {
+      setPasscode(passcodeProp);
+    }
+  }, [passcodeProp]);
+
   const [message, setMessage] = useState<string | null>(null);
   const [uploadQueue, setUploadQueue] = useState<Array<{ file: File; label: string }>>([]);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -32,43 +44,47 @@ export const AdminUploads: React.FC = () => {
 
   const uiGatePasscodeRaw = (import.meta as any).env?.VITE_ADMIN_PASSCODE;
   const uiGatePasscode = typeof uiGatePasscodeRaw === 'string' ? uiGatePasscodeRaw.trim() : '';
-  const requireUiGate = Boolean(uiGatePasscode) && uiGatePasscode !== 'change-me';
-  const isDev = Boolean((import.meta as any).env?.DEV);
+  const requireUiGate = Boolean(uiGatePasscode) && uiGatePasscode !== 'change-me' && !embedded;
   const v1ApiBaseUrl = (((import.meta as any).env?.VITE_V1_API_BASE_URL as string | undefined) || '').trim();
   const mediaUploadUrl = useMemo(() => {
-    if (!isDev) return '/api/media/upload.php';
-    if (!v1ApiBaseUrl) return '/api/v1/media/upload';
+    if (!v1ApiBaseUrl) return '/api/media/upload';
     try {
-      return new URL('/api/v1/media/upload', v1ApiBaseUrl).toString();
+      return new URL('/api/media/upload', v1ApiBaseUrl).toString();
     } catch {
-      return '/api/v1/media/upload';
+      return '/api/media/upload';
     }
-  }, [isDev, v1ApiBaseUrl]);
+  }, [v1ApiBaseUrl]);
 
   const mediaUpdateUrl = useMemo(() => {
-    if (!isDev) return '/api/media/update.php';
     if (!v1ApiBaseUrl) return '/api/v1/media'; 
     try {
       return new URL('/api/v1/media', v1ApiBaseUrl).toString();
     } catch {
       return '/api/v1/media';
     }
-  }, [isDev, v1ApiBaseUrl]);
+  }, [v1ApiBaseUrl]);
 
   const updateMedia = async (id: string, updates: { title?: string; category?: string }) => {
-    if (!passcode.trim()) return;
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!passcode.trim() && !token) return;
     try {
-      const isPhp = !isDev;
-      const url = isPhp ? mediaUpdateUrl : `${mediaUpdateUrl}/${id.replace('med_', '')}`;
-      const method = isPhp ? 'POST' : 'PATCH';
-      const body = isPhp ? { id, ...updates } : updates;
+      const url = `${mediaUpdateUrl}/${id}`;
+      const method = 'PUT';
+      const body = updates;
       
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (passcode.trim()) {
+        headers['x-admin-passcode'] = passcode;
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(url, {
         method,
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-admin-passcode': passcode 
-        },
+        headers,
         body: JSON.stringify(body)
       });
       const json = await res.json();
@@ -85,18 +101,26 @@ export const AdminUploads: React.FC = () => {
   };
 
   const updateMediaSilently = async (id: string, updates: { title?: string; category?: string }) => {
-    if (!passcode.trim()) return null;
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!passcode.trim() && !token) return null;
     try {
-      const isPhp = !isDev;
-      const url = isPhp ? mediaUpdateUrl : `${mediaUpdateUrl}/${id.replace('med_', '')}`;
-      const method = isPhp ? 'POST' : 'PATCH';
-      const body = isPhp ? { id, ...updates } : updates;
+      const url = `${mediaUpdateUrl}/${id}`;
+      const method = 'PUT';
+      const body = updates;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (passcode.trim()) {
+        headers['x-admin-passcode'] = passcode;
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(url, {
         method,
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-admin-passcode': passcode 
-        },
+        headers,
         body: JSON.stringify(body)
       });
       const json = await res.json().catch(() => null);
@@ -155,8 +179,10 @@ export const AdminUploads: React.FC = () => {
 
   const uploadFiles = async (files: Array<{ file: File; label: string }>) => {
     const currentPasscode = passcode.trim();
-    if (!currentPasscode) {
-      setToast('Enter admin passcode');
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    
+    if (!currentPasscode && !token) {
+      setToast('Enter admin passcode or log in');
       return false;
     }
     if (requireUiGate && currentPasscode !== uiGatePasscode) {
@@ -170,9 +196,17 @@ export const AdminUploads: React.FC = () => {
       for (const item of files) body.append('files[]', item.file);
       if (selectedCategory) body.append('category', selectedCategory);
       
+      const headers: Record<string, string> = {};
+      if (currentPasscode) {
+        headers['x-admin-passcode'] = currentPasscode;
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(mediaUploadUrl, {
         method: 'POST',
-        headers: { 'x-admin-passcode': currentPasscode },
+        headers,
         body,
       });
       const json = await res.json().catch(() => null);
@@ -242,6 +276,202 @@ export const AdminUploads: React.FC = () => {
     if (ok) setUploadQueue([]);
   };
 
+  const gridContent = (
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <div className="md:col-span-7 border border-white/5 bg-charcoal/50 p-8">
+        <div className="text-white font-semibold mb-2">Upload</div>
+        <div className="text-gray-500 text-sm font-light leading-loose">
+          Images, videos, PDFs, Word docs. Multiple files supported.
+        </div>
+        
+        <div className="mb-4 mt-4">
+          <div className={labelClass}>Category (Optional)</div>
+          <input
+            className={fieldClass}
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            list="media-categories"
+            placeholder="Type a category or pick one"
+          />
+          <datalist id="media-categories">
+            {PROGRAM_CATEGORIES.map((cat) => (
+              <option key={cat} value={cat} />
+            ))}
+            {SYSTEM_CATEGORIES.map((cat) => (
+              <option key={cat} value={cat} />
+            ))}
+            {MEDIA_CATEGORIES.map((cat) => (
+              <option key={cat} value={cat} />
+            ))}
+          </datalist>
+        </div>
+
+        <div
+          className="mt-6 border border-dashed border-white/10 rounded-sm bg-charcoal/30 p-6 text-gray-300"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            addUploadFiles(e.dataTransfer.files);
+          }}
+        >
+          <div className="flex flex-col gap-4">
+            <input
+              type="file"
+              multiple
+              className="text-sm text-gray-300"
+              accept="image/*,video/*,application/pdf,.doc,.docx"
+              onChange={(e) => addUploadFiles(e.target.files || [])}
+              disabled={uploadBusy}
+            />
+            {uploadQueue.length > 0 && (
+              <div className="border border-white/5 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-gray-500 mb-2">Queued</div>
+                <div className="space-y-2">
+                  {uploadQueue.slice(0, 10).map((file, idx) => (
+                    <div key={`${file.file.name}-${idx}`} className="flex items-center justify-between gap-4">
+                      <input
+                        className="text-sm text-white/90 truncate bg-transparent outline-none flex-1"
+                        value={file.label}
+                        onChange={(e) =>
+                          setUploadQueue((prev) => prev.map((p, i) => (i === idx ? { ...p, label: e.target.value } : p)))
+                        }
+                        disabled={uploadBusy}
+                        title={file.label}
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => setUploadQueue((prev) => prev.filter((_, i) => i !== idx))}
+                        disabled={uploadBusy}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                  {uploadQueue.length > 10 && <div className="text-xs text-gray-500">+{uploadQueue.length - 10} more</div>}
+                </div>
+              </div>
+            )}
+            <div className="flex gap-3 flex-wrap">
+              {!autoUpload && (
+                <Button 
+                  onClick={uploadNow} 
+                  disabled={uploadBusy || uploadQueue.length === 0 || (!passcode.trim() && !(typeof window !== 'undefined' && window.localStorage.getItem('auth_token')))}
+                >
+                  {uploadBusy ? 'Uploading…' : 'Upload'}
+                </Button>
+              )}
+              <Button variant="outline" onClick={clearUploads} disabled={uploadBusy}>
+                Clear
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="md:col-span-5 border border-white/5 bg-charcoal/50 p-8">
+        <div className="text-white font-semibold mb-2">Uploaded Links</div>
+        <div className="text-gray-500 text-sm font-light leading-loose">Copy a link and paste it into the admin console.</div>
+        <div className="mt-6 space-y-4">
+          {uploadedMedia.length === 0 ? (
+            <div className="text-sm text-gray-500 font-light">No uploads yet.</div>
+          ) : (
+            <>
+              {uploadedMedia.slice(0, 12).map((item, idx) => {
+                const url = typeof item?.url === 'string' ? item.url : '';
+                const title = typeof item?.title === 'string' ? item.title : url || 'Upload';
+                const displayUrl = toPublicUrl(url);
+                const isEditing = editingId === item.id;
+
+                return (
+                  <div key={`${item.id}-${idx}`} className="border border-white/5 bg-black/20 p-4">
+                    {isEditing ? (
+                        <div className="space-y-3 mb-3">
+                            <input 
+                                className={fieldClass}
+                                value={editForm.title}
+                                onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                                placeholder="Title"
+                            />
+                            <input
+                              className={fieldClass}
+                              value={editForm.category}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))}
+                              list="media-categories"
+                              placeholder="Category"
+                            />
+                            <div className="flex gap-2">
+                                <Button 
+                                    className="!py-1 !text-xs" 
+                                    onClick={() => updateMedia(item.id, { title: editForm.title, category: editForm.category })}
+                                >
+                                    Save
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    className="!py-1 !text-xs" 
+                                    onClick={() => setEditingId(null)}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="mb-2">
+                            <div className="flex justify-between items-start">
+                                <div className="text-white text-sm truncate">{title}</div>
+                                <button 
+                                    onClick={() => {
+                                        setEditingId(item.id);
+                                        setEditForm({ title: item.title, category: item.category || '' });
+                                    }}
+                                    className="text-[10px] text-gold-500 hover:underline uppercase"
+                                >
+                                    Edit
+                                </button>
+                            </div>
+                            {item.category && (
+                                <div className="text-[10px] text-gold-500/80 uppercase tracking-wider mb-1">
+                                    {item.category}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <div className="mt-1 text-xs text-gray-400 truncate">{displayUrl || url}</div>
+                    <div className="mt-3 flex gap-3">
+                      <Button variant="outline" onClick={() => copy(displayUrl || url)} disabled={!url}>
+                        Copy URL
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => window.open(displayUrl || url, '_blank', 'noopener,noreferrer')}
+                        disabled={!url}
+                      >
+                        Open
+                      </Button>
+                      <Button variant="outline" onClick={() => setUploadedMedia((prev) => prev.filter((_, i) => i !== idx))}>
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+              {uploadedMedia.length > 12 && <div className="text-xs text-gray-500">+{uploadedMedia.length - 12} more</div>}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-6 mt-4">
+        {message && <div className="text-gold-500 text-xs tracking-widest uppercase">{message}</div>}
+        {gridContent}
+      </div>
+    );
+  }
+
   return (
     <Section background="pattern" className="pt-28">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -290,187 +520,7 @@ export const AdminUploads: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          <div className="md:col-span-7 border border-white/5 bg-charcoal/50 p-8">
-            <div className="text-white font-semibold mb-2">Upload</div>
-            <div className="text-gray-500 text-sm font-light leading-loose">
-              Images, videos, PDFs, Word docs. Multiple files supported.
-            </div>
-            
-            <div className="mb-4 mt-4">
-              <div className={labelClass}>Category (Optional)</div>
-              <input
-                className={fieldClass}
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                list="media-categories"
-                placeholder="Type a category or pick one"
-              />
-              <datalist id="media-categories">
-                {PROGRAM_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat} />
-                ))}
-                {SYSTEM_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat} />
-                ))}
-                {MEDIA_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat} />
-                ))}
-              </datalist>
-            </div>
-
-            <div
-              className="mt-6 border border-dashed border-white/10 rounded-sm bg-charcoal/30 p-6 text-gray-300"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                addUploadFiles(e.dataTransfer.files);
-              }}
-            >
-              <div className="flex flex-col gap-4">
-                <input
-                  type="file"
-                  multiple
-                  className="text-sm text-gray-300"
-                  accept="image/*,video/*,application/pdf,.doc,.docx"
-                  onChange={(e) => addUploadFiles(e.target.files || [])}
-                  disabled={uploadBusy}
-                />
-                {uploadQueue.length > 0 && (
-                  <div className="border border-white/5 bg-black/20 p-4">
-                    <div className="text-xs uppercase tracking-[0.25em] text-gray-500 mb-2">Queued</div>
-                    <div className="space-y-2">
-                      {uploadQueue.slice(0, 10).map((file, idx) => (
-                        <div key={`${file.file.name}-${idx}`} className="flex items-center justify-between gap-4">
-                          <input
-                            className="text-sm text-white/90 truncate bg-transparent outline-none flex-1"
-                            value={file.label}
-                            onChange={(e) =>
-                              setUploadQueue((prev) => prev.map((p, i) => (i === idx ? { ...p, label: e.target.value } : p)))
-                            }
-                            disabled={uploadBusy}
-                            title={file.label}
-                          />
-                          <Button
-                            variant="outline"
-                            onClick={() => setUploadQueue((prev) => prev.filter((_, i) => i !== idx))}
-                            disabled={uploadBusy}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      ))}
-                      {uploadQueue.length > 10 && <div className="text-xs text-gray-500">+{uploadQueue.length - 10} more</div>}
-                    </div>
-                  </div>
-                )}
-                <div className="flex gap-3 flex-wrap">
-                  {!autoUpload && (
-                    <Button onClick={uploadNow} disabled={uploadBusy || uploadQueue.length === 0 || passcode.trim().length === 0}>
-                      {uploadBusy ? 'Uploading…' : 'Upload'}
-                    </Button>
-                  )}
-                  <Button variant="outline" onClick={clearUploads} disabled={uploadBusy}>
-                    Clear
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="md:col-span-5 border border-white/5 bg-charcoal/50 p-8">
-            <div className="text-white font-semibold mb-2">Uploaded Links</div>
-            <div className="text-gray-500 text-sm font-light leading-loose">Copy a link and paste it into the admin console.</div>
-            <div className="mt-6 space-y-4">
-              {uploadedMedia.length === 0 ? (
-                <div className="text-sm text-gray-500 font-light">No uploads yet.</div>
-              ) : (
-                <>
-                  {uploadedMedia.slice(0, 12).map((item, idx) => {
-                    const url = typeof item?.url === 'string' ? item.url : '';
-                    const title = typeof item?.title === 'string' ? item.title : url || 'Upload';
-                    const displayUrl = toPublicUrl(url);
-                    const isEditing = editingId === item.id;
-
-                    return (
-                      <div key={`${item.id}-${idx}`} className="border border-white/5 bg-black/20 p-4">
-                        {isEditing ? (
-                            <div className="space-y-3 mb-3">
-                                <input 
-                                    className={fieldClass}
-                                    value={editForm.title}
-                                    onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                                    placeholder="Title"
-                                />
-                                <input
-                                  className={fieldClass}
-                                  value={editForm.category}
-                                  onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))}
-                                  list="media-categories"
-                                  placeholder="Category"
-                                />
-                                <div className="flex gap-2">
-                                    <Button 
-                                        className="!py-1 !text-xs" 
-                                        onClick={() => updateMedia(item.id, { title: editForm.title, category: editForm.category })}
-                                    >
-                                        Save
-                                    </Button>
-                                    <Button 
-                                        variant="outline" 
-                                        className="!py-1 !text-xs" 
-                                        onClick={() => setEditingId(null)}
-                                    >
-                                        Cancel
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="mb-2">
-                                <div className="flex justify-between items-start">
-                                    <div className="text-white text-sm truncate">{title}</div>
-                                    <button 
-                                        onClick={() => {
-                                            setEditingId(item.id);
-                                            setEditForm({ title: item.title, category: item.category || '' });
-                                        }}
-                                        className="text-[10px] text-gold-500 hover:underline uppercase"
-                                    >
-                                        Edit
-                                    </button>
-                                </div>
-                                {item.category && (
-                                    <div className="text-[10px] text-gold-500/80 uppercase tracking-wider mb-1">
-                                        {item.category}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        <div className="mt-1 text-xs text-gray-400 truncate">{displayUrl || url}</div>
-                        <div className="mt-3 flex gap-3">
-                          <Button variant="outline" onClick={() => copy(displayUrl || url)} disabled={!url}>
-                            Copy URL
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => window.open(displayUrl || url, '_blank', 'noopener,noreferrer')}
-                            disabled={!url}
-                          >
-                            Open
-                          </Button>
-                          <Button variant="outline" onClick={() => setUploadedMedia((prev) => prev.filter((_, i) => i !== idx))}>
-                            Remove
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {uploadedMedia.length > 12 && <div className="text-xs text-gray-500">+{uploadedMedia.length - 12} more</div>}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        {gridContent}
       </div>
     </Section>
   );

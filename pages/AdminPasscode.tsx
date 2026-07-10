@@ -19,26 +19,15 @@ export const AdminPasscode: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const isDev = Boolean((import.meta as any).env?.DEV);
-  const writeUrl =
-    ((import.meta as any).env?.VITE_CONTENT_WRITE_URL as string | undefined) || (isDev ? '/api/content' : '/api/content.php');
-
   const passcodeChangeUrl = useMemo(() => {
-    if (!writeUrl) return '';
+    const base = (((import.meta as any).env?.VITE_V1_API_BASE_URL as string | undefined) || '').trim();
+    if (!base) return '/api/admin/passcode';
     try {
-      const u = new URL(writeUrl, window.location.origin);
-      if (u.pathname.endsWith('/api/content')) {
-        u.pathname = u.pathname.replace(/\/api\/content$/, '/api/admin/passcode');
-      } else if (u.pathname.endsWith('/api/content.php')) {
-        u.pathname = u.pathname.replace(/\/api\/content\.php$/, '/api/admin/passcode.php');
-      } else {
-        u.pathname = '/api/admin/passcode.php';
-      }
-      return u.toString();
+      return new URL('/api/admin/passcode', base).toString();
     } catch {
-      return '';
+      return '/api/admin/passcode';
     }
-  }, [writeUrl]);
+  }, []);
 
   const setToast = (text: string) => {
     setMessage(text);

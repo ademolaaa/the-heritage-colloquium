@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAdminAuth } from './lib/adminAuth.js';
 import { createDb } from './lib/db.js';
-import { initDb } from './lib/postgres.js';
+import { initDb, db as pgDb } from './lib/postgres.js';
 import { createV1Router } from './routes/v1.js';
 import { createSocialRouter } from './routes/social.js';
 import { createQARouter } from './routes/qa.js';
@@ -38,6 +38,8 @@ app.use(
   cors({
     origin: true,
     credentials: false,
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-passcode'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
   })
 );
 app.use(express.json({ limit: '10mb' }));
@@ -54,17 +56,34 @@ app.get('/api/health', (_req, res) => {
 const adminAuth = createAdminAuth({ dataDir: DATA_DIR, envPasscode: process.env.ADMIN_PASSCODE });
 const db = createDb({ dataDir: DATA_DIR });
 
-app.use('/api/v1', createV1Router({ db, verifyAdminPasscode: adminAuth.verifyAdminPasscode, uploadsDir: UPLOADS_DIR }));
+app.use('/api/v1', createV1Router({ verifyAdminPasscode: adminAuth.verifyAdminPasscode, uploadsDir: UPLOADS_DIR }));
 app.use('/api/auth', createAuthRouter());
 app.use('/api/social', createSocialRouter());
 app.use('/api/qa', createQARouter());
 app.use('/api/chatbot', createChatbotRouter());
-app.use('/api/media', createMediaRouter({ uploadsDir: UPLOADS_DIR }));
+app.use('/api/media', createMediaRouter({ uploadsDir: UPLOADS_DIR, verifyAdminPasscode: adminAuth.verifyAdminPasscode }));
 
 app.get('/api/content', async (_req, res) => {
   try {
-    const record = await db.readTable('siteSettings');
-    // Map the record to the expected 'content' structure
+    const result = await pgDb.query('SELECT value FROM site_settings WHERE key = $1', ['siteSettings']);
+    let record = result.rowCount > 0 ? result.rows[0].value : null;
+
+    if (!record) {
+      try {
+        record = await db.readTable('siteSettings');
+        if (record) {
+          await pgDb.query(
+            `INSERT INTO site_settings (key, value, updated_at)
+             VALUES ($1, $2, CURRENT_TIMESTAMP)
+             ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
+            ['siteSettings', JSON.stringify(record)]
+          );
+        }
+      } catch (err) {
+        console.warn('Legacy siteSettings fallback failed:', err);
+      }
+    }
+
     res.json({ ok: true, content: record || null });
   } catch (e) {
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : 'Unknown error' });
@@ -84,8 +103,12 @@ app.put('/api/content', async (req, res) => {
   }
 
   try {
-    // Save to the 'site_settings' table in Postgres
-    await db.writeTable('siteSettings', req.body);
+    await pgDb.query(
+      `INSERT INTO site_settings (key, value, updated_at)
+       VALUES ($1, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
+      ['siteSettings', JSON.stringify(req.body)]
+    );
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : 'Unknown error' });

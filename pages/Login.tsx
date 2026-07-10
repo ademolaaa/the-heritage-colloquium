@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Section } from '../components/Section';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 export const Login: React.FC = () => {
@@ -9,33 +10,55 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-      return;
-    }
-
-    if (data.user) {
-      const adminEmailsRaw = ((import.meta as any).env?.VITE_ADMIN_EMAILS as string) || '';
-      const adminEmails = adminEmailsRaw.split(',').map(e => e.trim().toLowerCase());
-      const isUserAdmin = data.user.email ? adminEmails.includes(data.user.email.toLowerCase()) : false;
-
-      if (isUserAdmin) {
-        navigate('/admin/console');
-      } else {
-        navigate('/feed'); // Send community members to the community feed
+      if (authError) {
+        setError(authError.message);
+        setLoading(false);
+        return;
       }
+
+      if (data.session) {
+        // Persist token
+        localStorage.setItem('auth_token', data.session.access_token);
+
+        // Fetch the user role from our database via /api/auth/me (triggers backend sync)
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${data.session.access_token}` },
+        });
+
+        let role = 'user';
+        if (res.ok) {
+          const profileData = await res.json();
+          if (profileData.ok && profileData.user) {
+            role = profileData.user.role;
+          }
+        }
+
+        // Refresh the AuthContext to pick up DB role
+        await refreshUser();
+
+        if (role === 'admin' || role === 'moderator') {
+          navigate('/admin/console');
+        } else {
+          navigate('/feed');
+        }
+      }
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,7 +109,18 @@ export const Login: React.FC = () => {
           </form>
 
           <p className="mt-6 text-center text-gray-400 text-sm">
-            Don't have an account? <Link to="/register" className="text-gold-500 hover:text-white transition-colors">Join Us</Link>
+            Don't have an account?{' '}
+            <Link to="/register" className="text-gold-500 hover:text-white transition-colors">
+              Join Us
+            </Link>
+          </p>
+
+          {/* First-time setup link — visible only when no admin exists */}
+          <p className="mt-4 text-center text-gray-600 text-xs">
+            First time?{' '}
+            <Link to="/admin/setup" className="text-gray-500 hover:text-gold-500 transition-colors underline">
+              Set up admin access
+            </Link>
           </p>
         </div>
       </div>

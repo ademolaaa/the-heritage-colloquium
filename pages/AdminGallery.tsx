@@ -6,7 +6,12 @@ import { GalleryItem, MediaItem } from '../types';
 const PASSCODE_KEY = 'heritage.admin.passcode';
 const REMEMBER_KEY = 'heritage.admin.rememberPasscode';
 
-export const AdminGallery: React.FC = () => {
+interface AdminGalleryProps {
+  embedded?: boolean;
+  passcodeProp?: string;
+}
+
+export const AdminGallery: React.FC<AdminGalleryProps> = ({ embedded = false, passcodeProp }) => {
   const [rememberPasscode, setRememberPasscode] = useState(() => {
     if (typeof window === 'undefined') return true;
     const value = window.localStorage.getItem(REMEMBER_KEY);
@@ -16,6 +21,13 @@ export const AdminGallery: React.FC = () => {
     if (typeof window === 'undefined') return '';
     return window.sessionStorage.getItem(PASSCODE_KEY) || '';
   });
+
+  useEffect(() => {
+    if (passcodeProp !== undefined) {
+      setPasscode(passcodeProp);
+    }
+  }, [passcodeProp]);
+
   const [message, setMessage] = useState<string | null>(null);
   const [galleries, setGalleries] = useState<GalleryItem[]>([]);
   const [selectedGallery, setSelectedGallery] = useState<GalleryItem | null>(null);
@@ -35,24 +47,21 @@ export const AdminGallery: React.FC = () => {
 
   const uiGatePasscodeRaw = (import.meta as any).env?.VITE_ADMIN_PASSCODE;
   const uiGatePasscode = typeof uiGatePasscodeRaw === 'string' ? uiGatePasscodeRaw.trim() : '';
-  const requireUiGate = Boolean(uiGatePasscode) && uiGatePasscode !== 'change-me';
-  const isDev = Boolean((import.meta as any).env?.DEV);
+  const requireUiGate = Boolean(uiGatePasscode) && uiGatePasscode !== 'change-me' && !embedded;
   const v1ApiBaseUrl = (((import.meta as any).env?.VITE_V1_API_BASE_URL as string | undefined) || '').trim();
   const lightboxMedia = lightboxMediaId ? mediaMap[lightboxMediaId] : null;
   
   const galleryListUrl = useMemo(() => {
-    if (!isDev) return '/api/gallery/index.php';
     if (!v1ApiBaseUrl) return '/api/v1/gallery';
     try {
       return new URL('/api/v1/gallery', v1ApiBaseUrl).toString();
     } catch {
       return '/api/v1/gallery';
     }
-  }, [isDev, v1ApiBaseUrl]);
+  }, [v1ApiBaseUrl]);
 
   const galleryItemUrl = (id: string) => {
     const safeId = encodeURIComponent(id);
-    if (!isDev) return `/api/gallery/item.php?id=${safeId}`;
     if (!v1ApiBaseUrl) return `/api/v1/gallery/${safeId}`;
     try {
       return new URL(`/api/v1/gallery/${safeId}`, v1ApiBaseUrl).toString();
@@ -62,18 +71,16 @@ export const AdminGallery: React.FC = () => {
   };
 
   const mediaApiUrl = useMemo(() => {
-    if (!isDev) return '/api/media/index.php';
-    if (!v1ApiBaseUrl) return '/api/v1/media';
+    if (!v1ApiBaseUrl) return '/api/media';
     try {
-      return new URL('/api/v1/media', v1ApiBaseUrl).toString();
+      return new URL('/api/media', v1ApiBaseUrl).toString();
     } catch {
-      return '/api/v1/media';
+      return '/api/media';
     }
-  }, [isDev, v1ApiBaseUrl]);
+  }, [v1ApiBaseUrl]);
 
   const mediaItemUrl = (id: string) => {
     const safeId = encodeURIComponent(id);
-    if (!isDev) return `/api/media/item.php?id=${safeId}`;
     if (!v1ApiBaseUrl) return `/api/v1/media/${safeId}`;
     try {
       return new URL(`/api/v1/media/${safeId}`, v1ApiBaseUrl).toString();
@@ -83,14 +90,13 @@ export const AdminGallery: React.FC = () => {
   };
 
   const uploadUrl = useMemo(() => {
-    if (!isDev) return '/api/media/upload.php';
-    if (!v1ApiBaseUrl) return '/api/v1/media/upload';
+    if (!v1ApiBaseUrl) return '/api/media/upload';
     try {
-      return new URL('/api/v1/media/upload', v1ApiBaseUrl).toString();
+      return new URL('/api/media/upload', v1ApiBaseUrl).toString();
     } catch {
-      return '/api/v1/media/upload';
+      return '/api/media/upload';
     }
-  }, [isDev, v1ApiBaseUrl]);
+  }, [v1ApiBaseUrl]);
 
   const fieldClass =
     'w-full bg-transparent border border-white/10 px-4 py-3 text-white focus:border-gold-500 focus:outline-none transition-colors font-serif';
@@ -141,10 +147,15 @@ export const AdminGallery: React.FC = () => {
     // Let's assume we can fetch all for now or the gallery response includes media?
     // The gallery item has mediaIds.
     // Let's fetch all media for simplicity in this MVP.
-    if (!passcode.trim()) return;
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!passcode.trim() && !token) return;
     try {
+      const headers: Record<string, string> = {};
+      if (passcode.trim()) headers['x-admin-passcode'] = passcode;
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(`${mediaApiUrl}?limit=500`, {
-        headers: { 'x-admin-passcode': passcode }
+        headers
       });
       const json = await res.json();
       if (json.ok && Array.isArray(json.items)) {
@@ -165,8 +176,9 @@ export const AdminGallery: React.FC = () => {
   }, [galleryListUrl, mediaApiUrl, passcode]);
 
   const createGallery = async () => {
-    if (!passcode) {
-      setToast('Enter admin passcode');
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!passcode && !token) {
+      setToast('Enter admin passcode or log in');
       return;
     }
     if (!title) {
@@ -175,12 +187,15 @@ export const AdminGallery: React.FC = () => {
     }
     try {
       setBusy(true);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (passcode) headers['x-admin-passcode'] = passcode;
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(galleryListUrl, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-admin-passcode': passcode 
-        },
+        headers,
         body: JSON.stringify({
           title,
           description,
@@ -207,15 +222,19 @@ export const AdminGallery: React.FC = () => {
   };
 
   const updateGallery = async (id: string, updates: Partial<GalleryItem>) => {
-    if (!passcode) return;
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!passcode && !token) return;
     try {
       setBusy(true);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (passcode) headers['x-admin-passcode'] = passcode;
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(galleryItemUrl(id), {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-admin-passcode': passcode 
-        },
+        headers,
         body: JSON.stringify(updates)
       });
       const json = await res.json();
@@ -234,7 +253,8 @@ export const AdminGallery: React.FC = () => {
   const deleteGallery = async (id: string) => {
     const yes = confirm('Are you sure? This does not delete the images, only the gallery.');
     if (!yes) return;
-    if (!passcode) return;
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!passcode && !token) return;
     const alsoDeleteMedia = confirm('Also permanently delete all uploaded files in this gallery?');
     try {
       setBusy(true);
@@ -244,9 +264,13 @@ export const AdminGallery: React.FC = () => {
           await deleteMedia(mid, { suppressToast: true, skipConfirm: true });
         }
       }
+      const headers: Record<string, string> = {};
+      if (passcode) headers['x-admin-passcode'] = passcode;
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(galleryItemUrl(id), {
         method: 'DELETE',
-        headers: { 'x-admin-passcode': passcode }
+        headers
       });
       const json = await res.json();
       if (json.ok) {
@@ -262,8 +286,9 @@ export const AdminGallery: React.FC = () => {
   };
 
   const deleteMedia = async (mediaId: string, opts?: { suppressToast?: boolean; skipConfirm?: boolean }) => {
-    if (!passcode.trim()) {
-      if (!opts?.suppressToast) setToast('Enter passcode');
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!passcode.trim() && !token) {
+      if (!opts?.suppressToast) setToast('Enter passcode or log in');
       return;
     }
     if (requireUiGate && passcode.trim() !== uiGatePasscode) {
@@ -276,9 +301,13 @@ export const AdminGallery: React.FC = () => {
     }
     try {
       setBusy(true);
+      const headers: Record<string, string> = {};
+      if (passcode) headers['x-admin-passcode'] = passcode;
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(mediaItemUrl(mediaId), {
         method: 'DELETE',
-        headers: { 'x-admin-passcode': passcode },
+        headers,
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
@@ -310,8 +339,9 @@ export const AdminGallery: React.FC = () => {
 
   const uploadFiles = async (files: Array<{ file: File; label: string }>) => {
     if (!selectedGallery) return;
-    if (!passcode) {
-      setToast('Enter passcode');
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!passcode && !token) {
+      setToast('Enter passcode or log in');
       return;
     }
     if (requireUiGate && passcode.trim() !== uiGatePasscode) {
@@ -323,9 +353,13 @@ export const AdminGallery: React.FC = () => {
       const body = new FormData();
       for (const item of files) body.append('files[]', item.file);
       
+      const headers: Record<string, string> = {};
+      if (passcode) headers['x-admin-passcode'] = passcode;
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(uploadUrl, {
         method: 'POST',
-        headers: { 'x-admin-passcode': passcode },
+        headers,
         body
       });
       const json = await res.json().catch(() => null);
@@ -349,9 +383,13 @@ export const AdminGallery: React.FC = () => {
             continue;
           }
           try {
+            const renameHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (passcode) renameHeaders['x-admin-passcode'] = passcode;
+            if (token) renameHeaders['Authorization'] = `Bearer ${token}`;
+
             const renameRes = await fetch(mediaItemUrl(m.id), {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json', 'x-admin-passcode': passcode },
+              headers: renameHeaders,
               body: JSON.stringify({ title: label }),
             });
             const renameJson = await renameRes.json().catch(() => null);
@@ -396,8 +434,9 @@ export const AdminGallery: React.FC = () => {
       setToast('Title is required');
       return;
     }
-    if (!passcode.trim()) {
-      setToast('Enter passcode');
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!passcode.trim() && !token) {
+      setToast('Enter passcode or log in');
       return;
     }
     if (requireUiGate && passcode.trim() !== uiGatePasscode) {
@@ -406,9 +445,13 @@ export const AdminGallery: React.FC = () => {
     }
     try {
       setBusy(true);
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (passcode) headers['x-admin-passcode'] = passcode;
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(mediaItemUrl(lightboxMediaId), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-admin-passcode': passcode },
+        headers,
         body: JSON.stringify({ title: nextTitle }),
       });
       const json = await res.json().catch(() => null);
@@ -472,6 +515,268 @@ export const AdminGallery: React.FC = () => {
     await updateGallery(selectedGallery.id, { mediaIds: newMediaIds });
   };
 
+  const gridContent = (
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+      {/* List / Create */}
+      <div className="md:col-span-4 space-y-6">
+        <div className="border border-white/5 bg-charcoal/50 p-6">
+          <h3 className="text-white font-semibold mb-4">Create New Gallery</h3>
+          <div className="space-y-4">
+            <input
+              className={fieldClass}
+              placeholder="Gallery Title"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+            />
+            <input
+              className={fieldClass}
+              placeholder="Year (optional)"
+              type="number"
+              value={year}
+              onChange={e => setYear(e.target.value)}
+            />
+            <textarea
+              className={fieldClass}
+              placeholder="Description (optional)"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+            />
+            <Button onClick={createGallery} disabled={busy || !title} className="w-full">
+              Create Gallery
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {galleries.map(g => (
+            <div 
+              key={g.id}
+              onClick={() => setSelectedGallery(g)}
+              className={`p-4 border cursor-pointer transition-colors ${selectedGallery?.id === g.id ? 'border-gold-500 bg-gold-500/10' : 'border-white/5 bg-charcoal/30 hover:bg-charcoal/50'}`}
+            >
+              <div className="text-white font-medium">{g.title}</div>
+              <div className="text-xs text-gray-500 mt-1">{g.year || 'No year'} • {g.mediaIds?.length || 0} items</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Details / Edit */}
+      <div className="md:col-span-8">
+        {selectedGallery ? (
+          <div className="border border-white/5 bg-charcoal/50 p-8">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl text-white font-display">{selectedGallery.title}</h2>
+                <p className="text-gray-400 text-sm mt-1">{selectedGallery.description}</p>
+              </div>
+              <Button variant="outline" onClick={() => deleteGallery(selectedGallery.id)} disabled={busy}>
+                Delete
+              </Button>
+            </div>
+
+            <div 
+              className="mb-8 border border-dashed border-white/10 rounded-sm bg-charcoal/30 p-6 text-gray-300"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                addUploadFiles(e.dataTransfer.files);
+              }}
+            >
+               <div className="flex flex-col gap-4">
+                  <p className="text-sm text-center text-gray-400">Drag & Drop images here to upload to this gallery</p>
+                  <input
+                    type="file"
+                    multiple
+                    className="text-sm text-gray-300 mx-auto"
+                    accept="image/*,video/*"
+                    onChange={(e) => addUploadFiles(e.target.files || [])}
+                    disabled={busy}
+                  />
+                  {uploadQueue.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-xs uppercase tracking-widest text-gold-500 mb-2">{uploadQueue.length} files queued</div>
+                      <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                        {uploadQueue.slice(0, 10).map((item, idx) => (
+                          <div key={`${item.file.name}-${idx}`} className="flex items-center justify-between gap-3 border border-white/5 bg-black/20 px-3 py-2">
+                            <input
+                              className="flex-1 bg-transparent outline-none text-xs text-gray-300 truncate"
+                              value={item.label}
+                              onChange={(e) =>
+                                setUploadQueue((prev) => prev.map((p, i) => (i === idx ? { ...p, label: e.target.value } : p)))
+                              }
+                              disabled={busy}
+                              title={item.label}
+                            />
+                            <Button
+                              variant="outline"
+                              className="!py-1 !text-xs"
+                              onClick={() => setUploadQueue((prev) => prev.filter((_, i) => i !== idx))}
+                              disabled={busy}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                        {uploadQueue.length > 10 && (
+                          <div className="text-xs text-gray-500">+{uploadQueue.length - 10} more</div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button onClick={() => uploadFiles(uploadQueue)} disabled={busy}>Upload All</Button>
+                        <Button variant="outline" onClick={() => setUploadQueue([])}>Clear</Button>
+                      </div>
+                    </div>
+                  )}
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {selectedGallery.mediaIds?.map((mid, index) => {
+                const m = mediaMap[mid];
+                if (!m) return null;
+                return (
+                  <div 
+                    key={mid} 
+                    className={`relative group border border-white/10 bg-black/40 transition-opacity ${draggedIndex === index ? 'opacity-50' : 'opacity-100'}`}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onClick={() => openLightbox(mid)}
+                    style={{ cursor: 'move' }}
+                  >
+                    {m.type === 'image' ? (
+                      <img src={m.url} alt={m.title} className="w-full aspect-square object-cover" />
+                    ) : m.type === 'video' ? (
+                      <video src={m.url} className="w-full aspect-square object-cover" />
+                    ) : (
+                      <div className="w-full aspect-square flex items-center justify-center text-gray-500 bg-white/5">
+                        {m.type}
+                      </div>
+                    )}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void removeFromGallery(mid);
+                      }}
+                      className="absolute top-2 right-2 bg-red-500/80 text-white text-xs p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      Remove
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void deleteMedia(mid);
+                      }}
+                      className="absolute top-2 left-2 bg-red-500/80 text-white text-xs p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      Delete
+                    </button>
+                    <div className="p-2 truncate text-xs text-gray-400">{m.title}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="h-full flex items-center justify-center text-gray-500 border border-white/5 bg-charcoal/30">
+            Select a gallery to manage
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const lightboxContent = lightboxMedia && (
+    <div
+      className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4 md:p-10"
+      onClick={closeLightbox}
+    >
+      <div className="w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div className="text-white text-sm truncate">{lightboxMedia.title}</div>
+          <div className="flex items-center gap-2">
+            {lightboxMedia.type === 'image' && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setLightboxZoom((z) => Math.max(1, Math.round((z - 0.25) * 100) / 100))}
+                  disabled={lightboxZoom <= 1}
+                >
+                  -
+                </Button>
+                <Button variant="outline" onClick={() => setLightboxZoom(1)} disabled={lightboxZoom === 1}>
+                  Reset
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setLightboxZoom((z) => Math.min(4, Math.round((z + 0.25) * 100) / 100))}
+                  disabled={lightboxZoom >= 4}
+                >
+                  +
+                </Button>
+              </>
+            )}
+            {lightboxMedia.type === 'video' && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const el = lightboxVideoRef.current;
+                  if (!el) return;
+                  const anyEl = el as any;
+                  if (typeof anyEl.requestFullscreen === 'function') anyEl.requestFullscreen();
+                }}
+              >
+                Fullscreen
+              </Button>
+            )}
+            <Button variant="outline" onClick={closeLightbox}>
+              Close
+            </Button>
+          </div>
+        </div>
+
+        <div className="border border-white/10 bg-black/40 overflow-auto max-h-[70vh] flex items-center justify-center">
+          {lightboxMedia.type === 'video' ? (
+            <video ref={lightboxVideoRef} src={lightboxMedia.url} controls className="max-w-full max-h-[70vh]" />
+          ) : (
+            <img
+              src={lightboxMedia.url}
+              alt={lightboxMedia.title}
+              className="max-w-full max-h-[70vh] object-contain"
+              style={{ transform: `scale(${lightboxZoom})`, transformOrigin: 'center center' }}
+            />
+          )}
+        </div>
+
+        <div className="mt-4 border border-white/10 bg-black/30 p-4">
+          <div className={labelClass}>Rename</div>
+          <div className="flex gap-2">
+            <input
+              className={fieldClass}
+              value={renameTitle}
+              onChange={(e) => setRenameTitle(e.target.value)}
+            />
+            <Button onClick={saveRename} disabled={busy || !renameTitle.trim()}>
+              Save
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-6 mt-4">
+        {message && <div className="text-gold-500 text-xs tracking-widest uppercase">{message}</div>}
+        {gridContent}
+        {lightboxContent}
+      </div>
+    );
+  }
+
   return (
     <Section background="pattern" className="pt-28">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -508,255 +813,9 @@ export const AdminGallery: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          {/* List / Create */}
-          <div className="md:col-span-4 space-y-6">
-            <div className="border border-white/5 bg-charcoal/50 p-6">
-              <h3 className="text-white font-semibold mb-4">Create New Gallery</h3>
-              <div className="space-y-4">
-                <input
-                  className={fieldClass}
-                  placeholder="Gallery Title"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                />
-                <input
-                  className={fieldClass}
-                  placeholder="Year (optional)"
-                  type="number"
-                  value={year}
-                  onChange={e => setYear(e.target.value)}
-                />
-                <textarea
-                  className={fieldClass}
-                  placeholder="Description (optional)"
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                />
-                <Button onClick={createGallery} disabled={busy || !title} className="w-full">
-                  Create Gallery
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {galleries.map(g => (
-                <div 
-                  key={g.id}
-                  onClick={() => setSelectedGallery(g)}
-                  className={`p-4 border cursor-pointer transition-colors ${selectedGallery?.id === g.id ? 'border-gold-500 bg-gold-500/10' : 'border-white/5 bg-charcoal/30 hover:bg-charcoal/50'}`}
-                >
-                  <div className="text-white font-medium">{g.title}</div>
-                  <div className="text-xs text-gray-500 mt-1">{g.year || 'No year'} • {g.mediaIds?.length || 0} items</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Details / Edit */}
-          <div className="md:col-span-8">
-            {selectedGallery ? (
-              <div className="border border-white/5 bg-charcoal/50 p-8">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h2 className="text-2xl text-white font-display">{selectedGallery.title}</h2>
-                    <p className="text-gray-400 text-sm mt-1">{selectedGallery.description}</p>
-                  </div>
-                  <Button variant="outline" onClick={() => deleteGallery(selectedGallery.id)} disabled={busy}>
-                    Delete
-                  </Button>
-                </div>
-
-                <div 
-                  className="mb-8 border border-dashed border-white/10 rounded-sm bg-charcoal/30 p-6 text-gray-300"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    addUploadFiles(e.dataTransfer.files);
-                  }}
-                >
-                   <div className="flex flex-col gap-4">
-                      <p className="text-sm text-center text-gray-400">Drag & Drop images here to upload to this gallery</p>
-                      <input
-                        type="file"
-                        multiple
-                        className="text-sm text-gray-300 mx-auto"
-                        accept="image/*,video/*"
-                        onChange={(e) => addUploadFiles(e.target.files || [])}
-                        disabled={busy}
-                      />
-                      {uploadQueue.length > 0 && (
-                        <div className="mt-2">
-                          <div className="text-xs uppercase tracking-widest text-gold-500 mb-2">{uploadQueue.length} files queued</div>
-                          <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                            {uploadQueue.slice(0, 10).map((item, idx) => (
-                              <div key={`${item.file.name}-${idx}`} className="flex items-center justify-between gap-3 border border-white/5 bg-black/20 px-3 py-2">
-                                <input
-                                  className="flex-1 bg-transparent outline-none text-xs text-gray-300 truncate"
-                                  value={item.label}
-                                  onChange={(e) =>
-                                    setUploadQueue((prev) => prev.map((p, i) => (i === idx ? { ...p, label: e.target.value } : p)))
-                                  }
-                                  disabled={busy}
-                                  title={item.label}
-                                />
-                                <Button
-                                  variant="outline"
-                                  className="!py-1 !text-xs"
-                                  onClick={() => setUploadQueue((prev) => prev.filter((_, i) => i !== idx))}
-                                  disabled={busy}
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            ))}
-                            {uploadQueue.length > 10 && (
-                              <div className="text-xs text-gray-500">+{uploadQueue.length - 10} more</div>
-                            )}
-                          </div>
-                          <div className="flex gap-2">
-                            <Button onClick={() => uploadFiles(uploadQueue)} disabled={busy}>Upload All</Button>
-                            <Button variant="outline" onClick={() => setUploadQueue([])}>Clear</Button>
-                          </div>
-                        </div>
-                      )}
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {selectedGallery.mediaIds?.map((mid, index) => {
-                    const m = mediaMap[mid];
-                    if (!m) return null;
-                    return (
-                      <div 
-                        key={mid} 
-                        className={`relative group border border-white/10 bg-black/40 transition-opacity ${draggedIndex === index ? 'opacity-50' : 'opacity-100'}`}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, index)}
-                        onDragOver={(e) => handleDragOver(e, index)}
-                        onDrop={(e) => handleDrop(e, index)}
-                        onClick={() => openLightbox(mid)}
-                        style={{ cursor: 'move' }}
-                      >
-                        {m.type === 'image' ? (
-                          <img src={m.url} alt={m.title} className="w-full aspect-square object-cover" />
-                        ) : m.type === 'video' ? (
-                          <video src={m.url} className="w-full aspect-square object-cover" />
-                        ) : (
-                          <div className="w-full aspect-square flex items-center justify-center text-gray-500 bg-white/5">
-                            {m.type}
-                          </div>
-                        )}
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void removeFromGallery(mid);
-                          }}
-                          className="absolute top-2 right-2 bg-red-500/80 text-white text-xs p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          Remove
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void deleteMedia(mid);
-                          }}
-                          className="absolute top-2 left-2 bg-red-500/80 text-white text-xs p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          Delete
-                        </button>
-                        <div className="p-2 truncate text-xs text-gray-400">{m.title}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center text-gray-500 border border-white/5 bg-charcoal/30">
-                Select a gallery to manage
-              </div>
-            )}
-          </div>
-        </div>
+        {gridContent}
       </div>
-      {lightboxMedia && (
-        <div
-          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4 md:p-10"
-          onClick={closeLightbox}
-        >
-          <div className="w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <div className="text-white text-sm truncate">{lightboxMedia.title}</div>
-              <div className="flex items-center gap-2">
-                {lightboxMedia.type === 'image' && (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => setLightboxZoom((z) => Math.max(1, Math.round((z - 0.25) * 100) / 100))}
-                      disabled={lightboxZoom <= 1}
-                    >
-                      -
-                    </Button>
-                    <Button variant="outline" onClick={() => setLightboxZoom(1)} disabled={lightboxZoom === 1}>
-                      Reset
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setLightboxZoom((z) => Math.min(4, Math.round((z + 0.25) * 100) / 100))}
-                      disabled={lightboxZoom >= 4}
-                    >
-                      +
-                    </Button>
-                  </>
-                )}
-                {lightboxMedia.type === 'video' && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const el = lightboxVideoRef.current;
-                      if (!el) return;
-                      const anyEl = el as any;
-                      if (typeof anyEl.requestFullscreen === 'function') anyEl.requestFullscreen();
-                    }}
-                  >
-                    Fullscreen
-                  </Button>
-                )}
-                <Button variant="outline" onClick={closeLightbox}>
-                  Close
-                </Button>
-              </div>
-            </div>
-
-            <div className="border border-white/10 bg-black/40 overflow-auto max-h-[70vh] flex items-center justify-center">
-              {lightboxMedia.type === 'video' ? (
-                <video ref={lightboxVideoRef} src={lightboxMedia.url} controls className="max-w-full max-h-[70vh]" />
-              ) : (
-                <img
-                  src={lightboxMedia.url}
-                  alt={lightboxMedia.title}
-                  className="max-w-full max-h-[70vh] object-contain"
-                  style={{ transform: `scale(${lightboxZoom})`, transformOrigin: 'center center' }}
-                />
-              )}
-            </div>
-
-            <div className="mt-4 border border-white/10 bg-black/30 p-4">
-              <div className={labelClass}>Rename</div>
-              <div className="flex gap-2">
-                <input
-                  className={fieldClass}
-                  value={renameTitle}
-                  onChange={(e) => setRenameTitle(e.target.value)}
-                />
-                <Button onClick={saveRename} disabled={busy || !renameTitle.trim()}>
-                  Save
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {lightboxContent}
     </Section>
   );
 };

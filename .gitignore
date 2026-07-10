@@ -37,3 +37,12 @@ dist-ssr/
 
 .vercel
 .env*.local
+
+# Debug files and cookie dumps
+*_cookies.json
+cookies_chrome.json
+*.png
+*.html
+*.txt
+content_download/
+.env.vercel.production
